@@ -1,0 +1,6 @@
+{
+  "name": "balance2-basic-watchface",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Minimal API 3.0 Zepp OS watch face for Amazfit Balance 2"
+}
