@@ -106,19 +106,19 @@ function lerpColor(a, b, t) {
 function drawTimeBackground(canvas) {
   canvas.setPaint({ color: GOLD_BG_TRANSPARENT, style: 'fill' })
   canvas.drawRect({
-    left: 50,
-    top: 52,
-    right: 430,
-    bottom: 108,
+    left: 40,
+    top: 40,
+    right: 440,
+    bottom: 120,
     color: GOLD_BG_TRANSPARENT,
   })
-  canvas.setPaint({ color: GOLD_DIM, style: 'stroke', line_width: 2 })
+  canvas.setPaint({ color: GOLD, style: 'stroke', line_width: 3 })
   canvas.drawRect({
-    left: 50,
-    top: 52,
-    right: 430,
-    bottom: 108,
-    color: GOLD_DIM,
+    left: 40,
+    top: 40,
+    right: 440,
+    bottom: 120,
+    color: GOLD,
   })
 }
 
