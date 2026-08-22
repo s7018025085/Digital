@@ -9,6 +9,11 @@ const LINE_WIDTH = 200
 const LINE_HEIGHT = 6
 const LINE_Y = 300 // vertical center of the line (tweak to taste)
 
+// Thin green ring on the screen border
+const BORDER_COLOR = 0x00ff00 // green
+const BORDER_WIDTH = 3 // thin ring thickness
+const BORDER_RADIUS = 236 // slightly inset from 240 to stay fully visible
+
 function twoDigits(value) {
   return value < 10 ? `0${value}` : `${value}`
 }
@@ -23,6 +28,13 @@ WatchFace({
       y: 0,
       w: SCREEN_SIZE,
       h: SCREEN_SIZE,
+    })
+    canvas.setPaint({ color: BORDER_COLOR, line_width: BORDER_WIDTH })
+    canvas.strokeCircle({
+      center_x: SCREEN_SIZE / 2,
+      center_y: SCREEN_SIZE / 2,
+      radius: BORDER_RADIUS,
+      color: BORDER_COLOR,
     })
     canvas.setPaint({ color: 0xffffff, line_width: LINE_HEIGHT })
     canvas.drawLine({
