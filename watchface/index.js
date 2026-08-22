@@ -6,7 +6,7 @@ const SCREEN_SIZE = 480
 
 const GOLD = 0xD4AF37
 const GOLD_DIM = 0x8A6A24
-const GOLD_BG_TRANSPARENT = 0xD0D4AF37
+const LIGHT_BLUE = 0x87CEEB
 
 const PULSE_GREEN = 0x00FF00
 const PULSE_YELLOW = 0xFFFF00
@@ -65,9 +65,11 @@ const BAT_SWEEP = 270
 
 let mainCanvas
 let timeWidget
+let secondsWidget
+let timeWidgetOutline
+let secondsWidgetOutline
 let pulseValueWidget
 let stepValueWidget
-let secondsWidget
 let batValueWidget
 
 let heartRate
@@ -101,25 +103,6 @@ function lerpColor(a, b, t) {
   const g = Math.round(ag + (bg - ag) * t)
   const bl = Math.round(ab + (bb - ab) * t)
   return (r << 16) | (g << 8) | bl
-}
-
-function drawTimeBackground(canvas) {
-  canvas.setPaint({ color: GOLD_BG_TRANSPARENT, style: 'fill' })
-  canvas.drawRect({
-    left: 40,
-    top: 40,
-    right: 440,
-    bottom: 120,
-    color: GOLD_BG_TRANSPARENT,
-  })
-  canvas.setPaint({ color: GOLD, style: 'stroke', line_width: 3 })
-  canvas.drawRect({
-    left: 40,
-    top: 40,
-    right: 440,
-    bottom: 120,
-    color: GOLD,
-  })
 }
 
 function drawArcCap(canvas, cx, cy, radius, angle, color, lineWidth) {
@@ -238,16 +221,12 @@ WatchFace({
     }
 
     // ========== ВРЕМЯ ==========
-    // x, y — положение на экране
-    // text_size — размер шрифта
-    // align_h / align_v — выравнивание
-    // =============================
     timeWidget = createWidget(widget.TEXT, {
-      x: 0,
-      y: 50,
-      w: 350,
-      h: 60,
-      color: GOLD,
+      x: 65,
+      y: 70,
+      w: 280,
+      h: 80,
+      color: LIGHT_BLUE,
       text_size: 70,
       align_h: align.RIGHT,
       align_v: align.CENTER_V,
@@ -258,15 +237,43 @@ WatchFace({
 
     secondsWidget = createWidget(widget.TEXT, {
       x: 360,
-      y: 88,
+      y: 112,
       w: 80,
-      h: 20,
-      color: GOLD,
-      text_size: 20,
+      h: 30,
+      color: LIGHT_BLUE,
+      text_size: 23,
       align_h: align.LEFT,
       align_v: align.CENTER_V,
       text_style: text_style.NONE,
       font: 'fonts/rostex.regular.ttf',
+      text: '00',
+    })
+
+    timeWidgetOutline = createWidget(widget.TEXT, {
+      x: 65,
+      y: 70,
+      w: 280,
+      h: 80,
+      color: 0x0A1428,
+      text_size: 70,
+      align_h: align.RIGHT,
+      align_v: align.CENTER_V,
+      text_style: text_style.NONE,
+      font: 'fonts/rostex.outline.ttf',
+      text: '00:00',
+    })
+
+    secondsWidgetOutline = createWidget(widget.TEXT, {
+      x: 360,
+      y: 112,
+      w: 80,
+      h: 30,
+      color: 0x0A1428,
+      text_size: 23,
+      align_h: align.LEFT,
+      align_v: align.CENTER_V,
+      text_style: text_style.NONE,
+      font: 'fonts/rostex.outline.ttf',
       text: '00',
     })
 
@@ -310,12 +317,13 @@ WatchFace({
     })
 
     function updateTime() {
-      drawTimeBackground(mainCanvas)
       const h = twoDigits(time.getHours())
       const m = twoDigits(time.getMinutes())
       const s = twoDigits(time.getSeconds())
       timeWidget.setProperty(prop.MORE, { text: `${h}:${m}` })
       secondsWidget.setProperty(prop.MORE, { text: s })
+      timeWidgetOutline.setProperty(prop.MORE, { text: `${h}:${m}` })
+      secondsWidgetOutline.setProperty(prop.MORE, { text: s })
     }
 
     function updatePulse() {
