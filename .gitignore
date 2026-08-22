@@ -1,38 +1,15 @@
-# --- OS / editor ---
 .DS_Store
-Thumbs.db
-Desktop.ini
-.idea/
-.vscode/
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-
-# --- Node / npm ---
-node_modules/
-*.log
-npm-debug.log*
+node_modules/**
+dist/*
+npm-debug.log
 yarn-debug.log*
 yarn-error.log*
 yarn.lock
 package-lock.json
-
-# --- ZeppOS build outputs ---
-dist/
-build/
-*.zab
-*.bin
-*.tga
-
-# --- Zepp watchface dev / simulator cache ---
-*.wfb
-.simulator/
-.zeus/
-*.zeus-cache
 selenium-debug.log
-
-# --- Misc ---
-out/
-tmp/
-temp/
+.idea
+.vscode
+*.suo
+*.ntvs*
+*.njsproj
+*.sln

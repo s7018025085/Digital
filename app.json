@@ -12,7 +12,10 @@
     "vender": "zepp",
     "description": "Minimal real-time watch face for Amazfit Balance 2"
   },
-  "permissions": [],
+  "permissions": [
+    "data:user.hd.heart_rate",
+    "data:user.hd.step"
+  ],
   "runtime": {
     "apiVersion": {
       "compatible": "3.0.0",
