@@ -77,9 +77,22 @@ function degToRad(deg) {
   return deg * Math.PI / 180
 }
 
+function drawArcCap(canvas, cx, cy, radius, angle, color, lineWidth) {
+  const rad = degToRad(angle)
+  const x = cx + Math.cos(rad) * radius
+  const y = cy + Math.sin(rad) * radius
+  canvas.setPaint({ color: color })
+  canvas.drawCircle({
+    center_x: x,
+    center_y: y,
+    radius: lineWidth / 2,
+    color: color,
+  })
+}
+
 // Фоновая дуга (серый контур)
 function drawScaleBackground(canvas, cx, cy, radius, startAngle, sweepAngle) {
-  canvas.setPaint({ color: GOLD_DIM, line_width: 6, line_cap: 'round' })
+  canvas.setPaint({ color: GOLD_DIM, line_width: 6 })
   canvas.strokeArc({
     center_x: cx,
     center_y: cy,
@@ -89,6 +102,7 @@ function drawScaleBackground(canvas, cx, cy, radius, startAngle, sweepAngle) {
     end_angle: (startAngle + sweepAngle) % 360,
     color: GOLD_DIM,
   })
+  drawArcCap(canvas, cx, cy, radius, startAngle, GOLD_DIM, 6)
 }
 
 // Шкала делений (метки на дуге)
@@ -119,7 +133,7 @@ function drawCircularScale(canvas, cx, cy, radius, startAngle, sweepAngle, divis
 function drawProgressArc(canvas, cx, cy, radius, startAngle, sweepAngle, progress, color) {
   if (progress <= 0.001) return
   const endAngle = (startAngle + progress * sweepAngle) % 360
-  canvas.setPaint({ color: color, line_width: 6, line_cap: 'round' })
+  canvas.setPaint({ color: color, line_width: 6 })
   canvas.strokeArc({
     center_x: cx,
     center_y: cy,
@@ -129,6 +143,8 @@ function drawProgressArc(canvas, cx, cy, radius, startAngle, sweepAngle, progres
     end_angle: endAngle,
     color: color,
   })
+  drawArcCap(canvas, cx, cy, radius, startAngle, color, 6)
+}
 }
 
 WatchFace({
