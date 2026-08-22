@@ -7,6 +7,17 @@ const SCREEN_SIZE = 480
 const GOLD = 0xD4AF37
 const GOLD_DIM = 0x8A6A24
 
+const PULSE_GREEN = 0x00FF00
+const PULSE_YELLOW = 0xFFFF00
+const PULSE_RED = 0xFF0000
+
+const STEP_GREEN_LOW = 0x004D00
+const STEP_GREEN_HIGH = 0x00FF00
+
+const BAT_GREEN = 0x00FF00
+const BAT_YELLOW = 0xFFFF00
+const BAT_RED = 0xFF0000
+
 // ============================================
 // ДУГА ПУЛЬСА
 // Центр: (PULSE_CX, PULSE_CY)
@@ -55,6 +66,7 @@ let mainCanvas
 let timeWidget
 let pulseValueWidget
 let stepValueWidget
+let secondsWidget
 let batValueWidget
 
 let heartRate
@@ -75,6 +87,19 @@ function clamp(value, min, max) {
 
 function degToRad(deg) {
   return deg * Math.PI / 180
+}
+
+function lerpColor(a, b, t) {
+  const ar = (a >> 16) & 0xFF
+  const ag = (a >> 8) & 0xFF
+  const ab = a & 0xFF
+  const br = (b >> 16) & 0xFF
+  const bg = (b >> 8) & 0xFF
+  const bb = b & 0xFF
+  const r = Math.round(ar + (br - ar) * t)
+  const g = Math.round(ag + (bg - ag) * t)
+  const bl = Math.round(ab + (bb - ab) * t)
+  return (r << 16) | (g << 8) | bl
 }
 
 function drawArcCap(canvas, cx, cy, radius, angle, color, lineWidth) {
@@ -144,7 +169,7 @@ function drawProgressArc(canvas, cx, cy, radius, startAngle, sweepAngle, progres
     color: color,
   })
   drawArcCap(canvas, cx, cy, radius, startAngle, color, 6)
-}
+  drawArcCap(canvas, cx, cy, radius, endAngle, color, 6)
 }
 
 WatchFace({
@@ -199,17 +224,31 @@ WatchFace({
     // =============================
     timeWidget = createWidget(widget.TEXT, {
       x: 0,
-      y: 250,
+      y: 50,
       w: SCREEN_SIZE,
       h: 60,
       color: GOLD,
-      text_size: 30,
+      text_size: 80,
       align_h: align.CENTER_H,
       align_v: align.CENTER_V,
       text_style: text_style.NONE,
-      text: '00:00:00',
+      font: 'fonts/rostex.regular.ttf',
+      text: '00:00',
     })
 
+    secondsWidget = createWidget(widget.TEXT, {
+      x: 356,
+      y: 88,
+      w: 80,
+      h: 20,
+      color: GOLD,
+      text_size: 20,
+      align_h: align.LEFT,
+      align_v: align.CENTER_V,
+      text_style: text_style.NONE,
+      font: 'fonts/rostex.regular.ttf',
+      text: '00',
+    })
 
     pulseValueWidget = createWidget(widget.TEXT, {
       x: 70,
@@ -254,7 +293,8 @@ WatchFace({
       const h = twoDigits(time.getHours())
       const m = twoDigits(time.getMinutes())
       const s = twoDigits(time.getSeconds())
-      timeWidget.setProperty(prop.MORE, { text: `${h}:${m}:${s}` })
+      timeWidget.setProperty(prop.MORE, { text: `${h}:${m}` })
+      secondsWidget.setProperty(prop.MORE, { text: s })
     }
 
     function updatePulse() {
@@ -268,10 +308,17 @@ WatchFace({
       const clamped = clamp(pulse, PULSE_MIN, PULSE_MAX)
       pulseValueWidget.setProperty(prop.MORE, { text: `${clamped}` })
 
+      let color
+      if (clamped <= 80) {
+        color = lerpColor(PULSE_GREEN, PULSE_YELLOW, (clamped - PULSE_MIN) / (80 - PULSE_MIN))
+      } else {
+        color = lerpColor(PULSE_YELLOW, PULSE_RED, (clamped - 80) / (PULSE_MAX - 80))
+      }
+
       drawScaleBackground(mainCanvas, PULSE_CX, PULSE_CY, PULSE_R, PULSE_START, PULSE_SWEEP)
       drawCircularScale(mainCanvas, PULSE_CX, PULSE_CY, PULSE_R, PULSE_START, PULSE_SWEEP, 30)
       const progress = (clamped - PULSE_MIN) / (PULSE_MAX - PULSE_MIN)
-      drawProgressArc(mainCanvas, PULSE_CX, PULSE_CY, PULSE_R, PULSE_START, PULSE_SWEEP, clamp(progress, 0, 1), GOLD)
+      drawProgressArc(mainCanvas, PULSE_CX, PULSE_CY, PULSE_R, PULSE_START, PULSE_SWEEP, clamp(progress, 0, 1), color)
     }
 
     function updateSteps() {
@@ -287,10 +334,12 @@ WatchFace({
       }
       stepValueWidget.setProperty(prop.MORE, { text: `${steps}` })
 
+      const progress = clamp(steps / goal, 0, 1)
+      const color = lerpColor(STEP_GREEN_LOW, STEP_GREEN_HIGH, progress)
+
       drawScaleBackground(mainCanvas, STEP_CX, STEP_CY, STEP_R, STEP_START, STEP_SWEEP)
       drawCircularScale(mainCanvas, STEP_CX, STEP_CY, STEP_R, STEP_START, STEP_SWEEP, 30)
-      const progress = clamp(steps / goal, 0, 1)
-      drawProgressArc(mainCanvas, STEP_CX, STEP_CY, STEP_R, STEP_START, STEP_SWEEP, progress, GOLD)
+      drawProgressArc(mainCanvas, STEP_CX, STEP_CY, STEP_R, STEP_START, STEP_SWEEP, progress, color)
     }
 
     function updateBattery() {
@@ -304,10 +353,17 @@ WatchFace({
       }
       batValueWidget.setProperty(prop.MORE, { text: `${bat}%` })
 
+      let color
+      if (bat >= 50) {
+        color = lerpColor(BAT_YELLOW, BAT_GREEN, (bat - 50) / 50)
+      } else {
+        color = lerpColor(BAT_RED, BAT_YELLOW, bat / 50)
+      }
+
       drawScaleBackground(mainCanvas, BAT_CX, BAT_CY, BAT_R, BAT_START, BAT_SWEEP)
       drawCircularScale(mainCanvas, BAT_CX, BAT_CY, BAT_R, BAT_START, BAT_SWEEP, 30)
       const progress = bat / 100
-      drawProgressArc(mainCanvas, BAT_CX, BAT_CY, BAT_R, BAT_START, BAT_SWEEP, clamp(progress, 0, 1), GOLD)
+      drawProgressArc(mainCanvas, BAT_CX, BAT_CY, BAT_R, BAT_START, BAT_SWEEP, clamp(progress, 0, 1), color)
     }
 
     function drawAllComplications() {
