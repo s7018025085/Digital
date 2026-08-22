@@ -6,6 +6,7 @@ const SCREEN_SIZE = 480
 
 const GOLD = 0xD4AF37
 const GOLD_DIM = 0x8A6A24
+const GOLD_BG_TRANSPARENT = 0x80D4AF37
 
 const PULSE_GREEN = 0x00FF00
 const PULSE_YELLOW = 0xFFFF00
@@ -100,6 +101,18 @@ function lerpColor(a, b, t) {
   const g = Math.round(ag + (bg - ag) * t)
   const bl = Math.round(ab + (bb - ab) * t)
   return (r << 16) | (g << 8) | bl
+}
+
+function drawTimeBackground(canvas) {
+  canvas.setPaint({ color: GOLD_BG_TRANSPARENT, style: 'fill' })
+  canvas.drawRoundRect({
+    left: 50,
+    top: 52,
+    right: 430,
+    bottom: 108,
+    radius: 28,
+    color: GOLD_BG_TRANSPARENT,
+  })
 }
 
 function drawArcCap(canvas, cx, cy, radius, angle, color, lineWidth) {
@@ -290,6 +303,7 @@ WatchFace({
     })
 
     function updateTime() {
+      drawTimeBackground(mainCanvas)
       const h = twoDigits(time.getHours())
       const m = twoDigits(time.getMinutes())
       const s = twoDigits(time.getSeconds())
