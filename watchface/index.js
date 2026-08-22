@@ -105,12 +105,11 @@ function lerpColor(a, b, t) {
 
 function drawTimeBackground(canvas) {
   canvas.setPaint({ color: GOLD_BG_TRANSPARENT, style: 'fill' })
-  canvas.drawRoundRect({
+  canvas.drawRect({
     left: 50,
     top: 52,
     right: 430,
     bottom: 108,
-    radius: 28,
     color: GOLD_BG_TRANSPARENT,
   })
 }
@@ -238,7 +237,7 @@ WatchFace({
     timeWidget = createWidget(widget.TEXT, {
       x: 0,
       y: 50,
-      w: SCREEN_SIZE,
+      w: 200,
       h: 60,
       color: GOLD,
       text_size: 80,
