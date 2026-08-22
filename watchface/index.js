@@ -7,30 +7,52 @@ const SCREEN_SIZE = 480
 const GOLD = 0xD4AF37
 const GOLD_DIM = 0x8A6A24
 
-const PULSE_CX = 120
-const PULSE_CY = 240
-const PULSE_R = 72
+// ============================================
+// ДУГА ПУЛЬСА
+// Центр: (PULSE_CX, PULSE_CY)
+// Радиус: PULSE_R
+// Начальный угол: PULSE_START
+// Дугой: PULSE_SWEEP
+// Мин/макс значения: PULSE_MIN / PULSE_MAX
+// ============================================
+const PULSE_CX = 123
+const PULSE_CY = 235
+const PULSE_R = 53
 const PULSE_MIN = 40
 const PULSE_MAX = 180
 const PULSE_START = 135
 const PULSE_SWEEP = 270
 
-const STEP_CX = 360
-const STEP_CY = 240
-const STEP_R = 72
+// ============================================
+// ДУГА ШАГОВ
+// Центр: (STEP_CX, STEP_CY)
+// Радиус: STEP_R
+// Начальный угол: STEP_START
+// Дугой: STEP_SWEEP
+// Цель шагов: STEP_GOAL_FALLBACK
+// ============================================
+const STEP_CX = 361
+const STEP_CY = 235
+const STEP_R = 53
 const STEP_GOAL_FALLBACK = 10000
 const STEP_START = 135
 const STEP_SWEEP = 270
 
+// ============================================
+// ДУГА БАТАРЕИ
+// Центр: (BAT_CX, BAT_CY)
+// Радиус: BAT_R
+// Начальный угол: BAT_START
+// Дугой: BAT_SWEEP
+// ============================================
 const BAT_CX = 240
-const BAT_CY = 365
-const BAT_R = 72
+const BAT_CY = 370
+const BAT_R = 53
 const BAT_START = 135
 const BAT_SWEEP = 270
 
 let mainCanvas
 let timeWidget
-let secondsWidget
 let pulseValueWidget
 let stepValueWidget
 let batValueWidget
@@ -55,8 +77,9 @@ function degToRad(deg) {
   return deg * Math.PI / 180
 }
 
+// Фоновая дуга (серый контур)
 function drawScaleBackground(canvas, cx, cy, radius, startAngle, sweepAngle) {
-  canvas.setPaint({ color: GOLD_DIM, line_width: 6 })
+  canvas.setPaint({ color: GOLD_DIM, line_width: 6, line_cap: 'round' })
   canvas.strokeArc({
     center_x: cx,
     center_y: cy,
@@ -68,6 +91,7 @@ function drawScaleBackground(canvas, cx, cy, radius, startAngle, sweepAngle) {
   })
 }
 
+// Шкала делений (метки на дуге)
 function drawCircularScale(canvas, cx, cy, radius, startAngle, sweepAngle, divisions) {
   const innerR = radius - 10
   for (let i = 0; i <= divisions; i++) {
@@ -80,7 +104,7 @@ function drawCircularScale(canvas, cx, cy, radius, startAngle, sweepAngle, divis
     const x3 = cx + Math.cos(rad) * (radius - len)
     const y3 = cy + Math.sin(rad) * (radius - len)
 
-    canvas.setPaint({ color: GOLD_DIM, line_width: isMajor ? 2 : 1 })
+    canvas.setPaint({ color: GOLD_DIM, line_width: isMajor ? 2 : 1, line_cap: 'round' })
     canvas.drawLine({
       x1: x3,
       y1: y3,
@@ -91,10 +115,11 @@ function drawCircularScale(canvas, cx, cy, radius, startAngle, sweepAngle, divis
   }
 }
 
+// Прогресс-дуга (основная заливка)
 function drawProgressArc(canvas, cx, cy, radius, startAngle, sweepAngle, progress, color) {
   if (progress <= 0.001) return
   const endAngle = (startAngle + progress * sweepAngle) % 360
-  canvas.setPaint({ color: color, line_width: 6 })
+  canvas.setPaint({ color: color, line_width: 6, line_cap: 'round' })
   canvas.strokeArc({
     center_x: cx,
     center_y: cy,
@@ -151,44 +176,24 @@ WatchFace({
       })
     }
 
+    // ========== ВРЕМЯ ==========
+    // x, y — положение на экране
+    // text_size — размер шрифта
+    // align_h / align_v — выравнивание
+    // =============================
     timeWidget = createWidget(widget.TEXT, {
       x: 0,
-      y: 170,
+      y: 250,
       w: SCREEN_SIZE,
-      h: 100,
+      h: 60,
       color: GOLD,
-      text_size: 80,
-      align_h: align.CENTER_H,
-      align_v: align.CENTER_V,
-      text_style: text_style.NONE,
-      text: '00:00',
-    })
-
-    secondsWidget = createWidget(widget.TEXT, {
-      x: 0,
-      y: 275,
-      w: SCREEN_SIZE,
-      h: 40,
-      color: GOLD_DIM,
       text_size: 30,
       align_h: align.CENTER_H,
       align_v: align.CENTER_V,
       text_style: text_style.NONE,
-      text: '00',
+      text: '00:00:00',
     })
 
-    createWidget(widget.TEXT, {
-      x: 70,
-      y: 200,
-      w: 100,
-      h: 24,
-      color: GOLD,
-      text_size: 18,
-      align_h: align.CENTER_H,
-      align_v: align.CENTER_V,
-      text_style: text_style.NONE,
-      text: 'ПУЛЬС',
-    })
 
     pulseValueWidget = createWidget(widget.TEXT, {
       x: 70,
@@ -201,32 +206,6 @@ WatchFace({
       align_v: align.CENTER_V,
       text_style: text_style.NONE,
       text: '--',
-    })
-
-    createWidget(widget.TEXT, {
-      x: 70,
-      y: 260,
-      w: 100,
-      h: 20,
-      color: GOLD_DIM,
-      text_size: 16,
-      align_h: align.CENTER_H,
-      align_v: align.CENTER_V,
-      text_style: text_style.NONE,
-      text: 'УД/МИН',
-    })
-
-    createWidget(widget.TEXT, {
-      x: 310,
-      y: 200,
-      w: 100,
-      h: 24,
-      color: GOLD,
-      text_size: 18,
-      align_h: align.CENTER_H,
-      align_v: align.CENTER_V,
-      text_style: text_style.NONE,
-      text: 'ШАГИ',
     })
 
     stepValueWidget = createWidget(widget.TEXT, {
@@ -242,32 +221,6 @@ WatchFace({
       text: '--',
     })
 
-    createWidget(widget.TEXT, {
-      x: 310,
-      y: 260,
-      w: 100,
-      h: 20,
-      color: GOLD_DIM,
-      text_size: 16,
-      align_h: align.CENTER_H,
-      align_v: align.CENTER_V,
-      text_style: text_style.NONE,
-      text: 'ШАГОВ',
-    })
-
-    createWidget(widget.TEXT, {
-      x: 170,
-      y: 340,
-      w: 140,
-      h: 24,
-      color: GOLD,
-      text_size: 18,
-      align_h: align.CENTER_H,
-      align_v: align.CENTER_V,
-      text_style: text_style.NONE,
-      text: 'БАТАРЕЯ',
-    })
-
     batValueWidget = createWidget(widget.TEXT, {
       x: 170,
       y: 364,
@@ -281,39 +234,11 @@ WatchFace({
       text: '--%',
     })
 
-    const stepLabels = [
-      { text: '0', angle: STEP_START },
-      { text: '2K', angle: STEP_START + STEP_SWEEP * 0.2 },
-      { text: '4K', angle: STEP_START + STEP_SWEEP * 0.4 },
-      { text: '6K', angle: STEP_START + STEP_SWEEP * 0.6 },
-      { text: '8K', angle: STEP_START + STEP_SWEEP * 0.8 },
-      { text: '10K', angle: (STEP_START + STEP_SWEEP) % 360 },
-    ]
-    const stepLabelR = STEP_R + 18
-    stepLabels.forEach(lbl => {
-      const rad = degToRad(lbl.angle)
-      const x = STEP_CX + Math.cos(rad) * stepLabelR - 15
-      const y = STEP_CY + Math.sin(rad) * stepLabelR - 10
-      createWidget(widget.TEXT, {
-        x: x,
-        y: y,
-        w: 30,
-        h: 20,
-        text: lbl.text,
-        text_size: 12,
-        color: GOLD_DIM,
-        align_h: align.CENTER_H,
-        align_v: align.CENTER_V,
-        text_style: text_style.NONE,
-      })
-    })
-
     function updateTime() {
       const h = twoDigits(time.getHours())
       const m = twoDigits(time.getMinutes())
-      timeWidget.setProperty(prop.MORE, { text: `${h}:${m}` })
       const s = twoDigits(time.getSeconds())
-      secondsWidget.setProperty(prop.MORE, { text: s })
+      timeWidget.setProperty(prop.MORE, { text: `${h}:${m}:${s}` })
     }
 
     function updatePulse() {
