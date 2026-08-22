@@ -6,7 +6,7 @@ const SCREEN_SIZE = 480
 
 const GOLD = 0xD4AF37
 const GOLD_DIM = 0x8A6A24
-const GOLD_BG_TRANSPARENT = 0x80D4AF37
+const GOLD_BG_TRANSPARENT = 0xB0D4AF37
 
 const PULSE_GREEN = 0x00FF00
 const PULSE_YELLOW = 0xFFFF00
@@ -111,6 +111,14 @@ function drawTimeBackground(canvas) {
     right: 430,
     bottom: 108,
     color: GOLD_BG_TRANSPARENT,
+  })
+  canvas.setPaint({ color: GOLD_DIM, style: 'stroke', line_width: 2 })
+  canvas.drawRect({
+    left: 50,
+    top: 52,
+    right: 430,
+    bottom: 108,
+    color: GOLD_DIM,
   })
 }
 
@@ -237,11 +245,11 @@ WatchFace({
     timeWidget = createWidget(widget.TEXT, {
       x: 0,
       y: 50,
-      w: 200,
+      w: 350,
       h: 60,
       color: GOLD,
-      text_size: 80,
-      align_h: align.CENTER_H,
+      text_size: 70,
+      align_h: align.RIGHT,
       align_v: align.CENTER_V,
       text_style: text_style.NONE,
       font: 'fonts/rostex.regular.ttf',
@@ -249,7 +257,7 @@ WatchFace({
     })
 
     secondsWidget = createWidget(widget.TEXT, {
-      x: 356,
+      x: 360,
       y: 88,
       w: 80,
       h: 20,
