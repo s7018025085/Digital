@@ -10,29 +10,29 @@ import { setInterval, clearInterval } from '@zos/timer'
 // обрезалось корпусом. Если двигаете элементы, держите их
 // внутри R_SAFE от CENTER_X/CENTER_Y.
 
-const SCREEN_W = 480
-const SCREEN_H = 480
-const CENTER_X = 240
-const CENTER_Y = 240  
-const R_SAFE = 228 // полезный радиус до того, как край экрана начнёт обрезать контент
+const SCREEN_W = 480                  // ширина экрана, px
+const SCREEN_H = 480                  // высота экрана, px
+const CENTER_X = 240                  // X центра экрана (экран/2)
+const CENTER_Y = 240                  // Y центра экрана (экран/2)
+const R_SAFE = 228                    // полезный радиус: ближе к краю контент обрезается корпусом
 
 // Компактная верхняя статистика, вдохновлённая тремя маленькими
 // циферблатами из образца. Подъём вверх оставляет чистый визуальный
 // зазор перед увеличенным отображением времени.
-const TOP_CY = 95
-const TOP_R = 29
-const TOP_GLOW_R = 32
-const TOP_LINE_W = 5
+const TOP_CY = 95                     // Y-центр трёх верхних колец (пульс/шаги/батарея)
+const TOP_R = 29                      // радиус верхних колец
+const TOP_GLOW_R = 29 + 3             // радиус зоны свечения вокруг верхних колец (R + свечение)
+const TOP_LINE_W = 5                  // толщина линии верхних колец
 
 // Иконки остаются внутри своих циферблатов; значения и подписи
 // образуют две чёткие строки прямо под ними, как в образце.
-const TOP_ICON_CY = TOP_CY + 1
-const TOP_VALUE_CY = TOP_CY + TOP_R + 16
-const TOP_LABEL_CY = TOP_VALUE_CY + 21
+const TOP_ICON_CY = TOP_CY + 1                        // Y-центр иконок внутри верхних колец
+const TOP_VALUE_CY = TOP_CY + TOP_R + 16              // Y-центр строки значений под верхними кольцами
+const TOP_LABEL_CY = TOP_VALUE_CY + 21                // Y-центр строки подписей (HR/STEPS/BATT)
 
-const HR_CX = 160
-const STEPS_CX = 240
-const BAT_CX = 320
+const HR_CX = 160                     // X-центр верхней колонки «Пульс»
+const STEPS_CX = 240                  // X-центр верхней колонки «Шаги» (центр экрана)
+const BAT_CX = 320                    // X-центр верхней колонки «Батарея»
 
 // Основное время — собрано как одна центрированная строка: [HH:MM] [:] [S-десятки] [S-единицы]
 // HH:MM выровнено по правому краю внутри своего блока, поэтому не нужно
@@ -42,78 +42,79 @@ const BAT_CX = 320
 // глифы тоже всегда центрированы. Только общая зарезервированная ширина
 // (TIME_HHMM_BOX_W и т.д.) — примерная оценка для центрирования всей строки;
 // если строка сдвинута влево/вправо целиком, подправьте TIME_HHMM_BOX_W ниже.
-const TIME_CY = 214
+const TIME_CY = 214                   // Y-центр строки основного времени HH:MM:SS
 // У Rostex широкие глифы, поэтому эти размеры резервируют достаточно места
 // для полной строки HH:MM:SS на экране 480 px без обрезки первой цифры.
-const TIME_FONT_SIZE = 58
-const TIME_SHADOW_OFFSET = 2
-const TIME_ROW_H = TIME_FONT_SIZE + 20
+const TIME_FONT_SIZE = 58             // размер шрифта основного времени
+const TIME_SHADOW_OFFSET = 2          // смещение тени времени вниз/вправо, px
+const TIME_ROW_H = TIME_FONT_SIZE + 20  // высота строки времени (шрифт + запас для масок прокрутки)
 
 // Мягкое свечение за временем: несколько тусклых копий со смещением 1-2px
 // в каждую сторону, нарисованных под тенью/основным текстом. Дешёвая
 // имитация свечения — у виджетов текста Zepp OS нет альфа-смешивания,
 // поэтому настоящее размытие невозможно.
-const TIME_GLOW_COLOR = 0x0b5b6d
-const TIME_GLOW_OFFSETS = [
+const TIME_GLOW_COLOR = 0x0b5b6d      // цвет свечения вокруг цифр времени
+const TIME_GLOW_OFFSETS = [           // смещения копий-«лучей» свечения относительно основного текста
   [-2, 0], [2, 0], [0, -2], [0, 2],
   [-1, -1], [1, -1], [-1, 1], [1, 1]
 ]
 
 // Оставляем большой запас для широких глифов HH:MM в Rostex; иначе Zepp OS
 // посчитает текст выходящим за пределы и запустит бегущую строку.
-const TIME_HHMM_BOX_W = 260
-const TIME_COLON_W = 24
-const TIME_SEC_DIGIT_W = 56
-const TIME_ROLL_MASK_PADDING = 16
+const TIME_HHMM_BOX_W = 260           // ширина блока HH:MM (с запасом под широкий шрифт)
+const TIME_COLON_W = 24               // ширина блока под двоеточие между HH:MM и секундами
+const TIME_SEC_DIGIT_W = 56           // ширина блока одной цифры секунд (десятки/единицы)
+const TIME_ROLL_MASK_PADDING = 16     // запас маски прокрутки цифр, чтобы глиф не вылезал при анимации
 
-const TIME_ROW_TOTAL_W = TIME_HHMM_BOX_W + TIME_COLON_W + TIME_SEC_DIGIT_W * 2
+const TIME_ROW_TOTAL_W = TIME_HHMM_BOX_W + TIME_COLON_W + TIME_SEC_DIGIT_W * 2  // общая ширина строки времени
 // Глифы HH:MM в Rostex визуально тяжелее справа, поэтому небольшая
 // оптическая поправка держит отображаемое время по центру круглого экрана.
-const TIME_ROW_LEFT = CENTER_X - TIME_ROW_TOTAL_W / 2 - 10
+const TIME_ROW_LEFT = CENTER_X - TIME_ROW_TOTAL_W / 2 - 10  // левый край строки времени (-10 = оптическая поправка)
 
-const TIME_HHMM_X = TIME_ROW_LEFT
-const TIME_HHMM_RIGHT = TIME_HHMM_X + TIME_HHMM_BOX_W
-const TIME_COLON_X = TIME_HHMM_RIGHT
-const TIME_SEC_TENS_X = TIME_COLON_X + TIME_COLON_W
-const TIME_SEC_UNITS_X = TIME_SEC_TENS_X + TIME_SEC_DIGIT_W
+const TIME_HHMM_X = TIME_ROW_LEFT                       // X левого края блока HH:MM
+const TIME_HHMM_RIGHT = TIME_HHMM_X + TIME_HHMM_BOX_W   // X правого края блока HH:MM (к нему прижат текст)
+const TIME_COLON_X = TIME_HHMM_RIGHT                    // X левого края блока двоеточия
+const TIME_SEC_TENS_X = TIME_COLON_X + TIME_COLON_W     // X левого края цифры «десятки» секунд
+const TIME_SEC_UNITS_X = TIME_SEC_TENS_X + TIME_SEC_DIGIT_W  // X левого края цифры «единицы» секунд
 
 // Тайминги анимации «механического счётчика» с прокруткой цифр
-const ROLL_DURATION_MS = 260
-const ROLL_STEP_MS = 26
-const ROLL_STEPS = Math.round(ROLL_DURATION_MS / ROLL_STEP_MS)
+const ROLL_DURATION_MS = 260          // полная длительность прокрутки одной цифры, мс
+const ROLL_STEP_MS = 26               // длительность одного кадра анимации, мс
+const ROLL_STEPS = Math.round(ROLL_DURATION_MS / ROLL_STEP_MS)  // число кадров анимации
 
 // Блок даты — день недели и дата теперь рисуются одной центрированной строкой
-const DATE_LINE_CY = 270
-const DATE_LINE_FONT_SIZE = 24
+const DATE_LINE_CY = 274              // Y-центр строки даты
+const DATE_LINE_FONT_SIZE = 24        // размер шрифта строки даты
 
 // Незаметные горизонтальные разделители визуально отделяют компактную
-// верхнюю статистику, время и дату, не конкурируя с метками на корпусе.
-const SECTION_LINE_X = 78
-const SECTION_LINE_W = SCREEN_W - SECTION_LINE_X * 2
-const TOP_TIME_LINE_Y = 168
-const TIME_DATE_LINE_Y = 264
-const DATE_BOTTOM_LINE_Y = 318
+// верхнюю статистику, время и дату. Рисуются через FILL_RECT: widget.LINE
+// на многих устройствах Zepp OS просто не отрисовывается.
+const SECTION_LINE_X = 20             // отступ разделителя от левого края (справа симметрично)
+const SECTION_LINE_W = SCREEN_W - SECTION_LINE_X * 2    // длина разделителя
+const DIVIDER_H = 2                   // толщина разделителя, px
+const TOP_TIME_LINE_Y = 172           // Y разделителя №1: между верхней статистикой и временем
+const TIME_DATE_LINE_Y = 255          // Y разделителя №2: между временем и датой
+const DATE_BOTTOM_LINE_Y = 290        // Y разделителя №3: между датой и нижними виджетами
 
-// Нижние информационные блоки (Погода / Батарея / Кислород). Кольца ниже
-// повторяют стиль верхних, но компактнее и приподняты, чтобы круглый край
-// не обрезал значения и подписи — это самый плотный ряд на экране.
-const BOTTOM_ICON_CY = 382
-const BOTTOM_VALUE_CY = 390
-const BOTTOM_LABEL_CY = 410
-const BOTTOM_BLOCK_W = 96
+// Нижние информационные блоки (Погода / Батарея / Кислород). Все три колонки
+// выровнены по высоте в один ряд: иконка и кольца центрированы на BOTTOM_RING_CY,
+// значения — в BOTTOM_VALUE_BOX, подписи — в BOTTOM_LABEL_BOX.
+const BOTTOM_RING_CY = 348            // Y-центр нижних колец и иконки погоды (весь ряд двигается им)
+const BOTTOM_RING_R = 34              // радиус нижних колец (батарея, SpO2)
+const BOTTOM_RING_GLOW_R = 34 + 3     // радиус зоны свечения нижних колец (R + свечение)
+const BOTTOM_RING_LINE_W = 5          // толщина линии нижних колец
+const BOTTOM_ICON_SIZE = 60           // размер квадратной иконки погоды, px
+const BOTTOM_VALUE_BOX_Y = 390        // Y верхней границы строки значений (--° / -- / --)
+const BOTTOM_VALUE_BOX_H = 26         // высота бокса строки значений
+const BOTTOM_LABEL_BOX_Y = 420        // Y верхней границы строки подписей (WEATHER/BATTERY/OXYGEN)
+const BOTTOM_LABEL_BOX_H = 18         // высота бокса строки подписей
+const BOTTOM_BLOCK_W = 120            // ширина бокса текста одной нижней колонки (для центрирования)
+const BOTTOM_VALUE_FONT = 24          // размер шрифта значений нижних виджетов
+const BOTTOM_LABEL_FONT = 14          // размер шрифта подписей нижних виджетов
 
-const BOTTOM_RING_CY = 356
-const BOTTOM_RING_R = 26
-const BOTTOM_RING_GLOW_R = 29
-const BOTTOM_RING_LINE_W = 4
-const BOTTOM_VALUE_BOX_Y = 386
-const BOTTOM_VALUE_BOX_H = 22
-const BOTTOM_LABEL_BOX_Y = 410
-const BOTTOM_LABEL_BOX_H = 16
-
-const WEATHER_CX = 134
-const BAT2_CX = 240
-const OXY_CX = 346
+const WEATHER_CX = 134                // X-центр нижней колонки «Погода» (слева)
+const BAT2_CX = 240                   // X-центр нижней колонки «Батарея» (центр экрана)
+const OXY_CX = 346                    // X-центр нижней колонки «Кислород SpO2» (справа)
 
 // Метки на корпусе
 const TICK_R = 222
@@ -136,7 +137,7 @@ const COLOR_TRACK = 0x1c1f24
 const COLOR_GLOW = 0x14181d
 const COLOR_TICK_DIM = 0x30343a
 const COLOR_SHADOW = 0x000000
-const COLOR_DIVIDER = 0x2a2d34
+const COLOR_DIVIDER = 0x4a5058
 const FONT_LABEL = 'fonts/Onest-VariableFont_wght.ttf'
 const FONT_REGULAR = 'fonts/rostex.regular.ttf'
 
@@ -781,13 +782,13 @@ function ensureRollTimerRunning() {
 function createSectionDividers() {
   const yPositions = [TOP_TIME_LINE_Y, TIME_DATE_LINE_Y, DATE_BOTTOM_LINE_Y]
   for (let i = 0; i < yPositions.length; i++) {
-    createWidget(widget.LINE, {
-      x1: SECTION_LINE_X,
-      y1: yPositions[i],
-      x2: SECTION_LINE_X + SECTION_LINE_W,
-      y2: yPositions[i],
-      color: COLOR_DIVIDER,
-      line_width: 3
+    // FILL_RECT вместо LINE: widget.LINE не отрисовывается на части устройств
+    createWidget(widget.FILL_RECT, {
+      x: SECTION_LINE_X,
+      y: yPositions[i],
+      w: SECTION_LINE_W,
+      h: DIVIDER_H,
+      color: COLOR_DIVIDER
     })
   }
 }
@@ -824,23 +825,23 @@ function updateWeatherIcon(index) {
 function createBottomWidgets() {
   const halfW = BOTTOM_BLOCK_W / 2
 
-  // --- Погода (слева) ---
+  // --- Погода (слева): иконка центрирована на одной оси с кольцами ---
   weatherIconWidget = createWidget(widget.IMG, {
-    x: 105,
-    y: 320,
-    w: 48,
-    h: 48,
+    x: WEATHER_CX - BOTTOM_ICON_SIZE / 2,
+    y: BOTTOM_RING_CY - BOTTOM_ICON_SIZE / 2,
+    w: BOTTOM_ICON_SIZE,
+    h: BOTTOM_ICON_SIZE,
     src: WEATHER_ICON_BASE + '26.png',
     auto_scale: true
   })
 
   weatherValueWidget = createText({
     x: WEATHER_CX - halfW,
-    y: BOTTOM_VALUE_CY - 12,
+    y: BOTTOM_VALUE_BOX_Y,
     w: BOTTOM_BLOCK_W,
-    h: 22,
+    h: BOTTOM_VALUE_BOX_H,
     text: '--°',
-    text_size: 20,
+    text_size: BOTTOM_VALUE_FONT,
     color: COLOR_WHITE,
     align_h: align.CENTER_H,
     align_v: align.CENTER_V
@@ -848,11 +849,11 @@ function createBottomWidgets() {
 
   createText({
     x: WEATHER_CX - halfW,
-    y: BOTTOM_LABEL_CY - 10,
+    y: BOTTOM_LABEL_BOX_Y,
     w: BOTTOM_BLOCK_W,
-    h: 16,
+    h: BOTTOM_LABEL_BOX_H,
     text: 'WEATHER',
-    text_size: 11,
+    text_size: BOTTOM_LABEL_FONT,
     color: COLOR_GRAY,
     align_h: align.CENTER_H,
     align_v: align.CENTER_V
@@ -871,7 +872,7 @@ function createBottomWidgets() {
     w: BOTTOM_BLOCK_W,
     h: BOTTOM_VALUE_BOX_H,
     text: '--',
-    text_size: 18,
+    text_size: BOTTOM_VALUE_FONT,
     color: COLOR_WHITE,
     align_h: align.CENTER_H,
     align_v: align.CENTER_V
@@ -883,7 +884,7 @@ function createBottomWidgets() {
     w: BOTTOM_BLOCK_W,
     h: BOTTOM_LABEL_BOX_H,
     text: 'BATTERY',
-    text_size: 11,
+    text_size: BOTTOM_LABEL_FONT,
     color: COLOR_GRAY,
     align_h: align.CENTER_H,
     align_v: align.CENTER_V
@@ -895,12 +896,12 @@ function createBottomWidgets() {
     BOTTOM_RING_LINE_W, oxygenGradient
   )
   createText({
-    x: OXY_CX - 32,
-    y: BOTTOM_RING_CY - 10,
-    w: 64,
-    h: 20,
+    x: OXY_CX - 40,
+    y: BOTTOM_RING_CY - 11,
+    w: 80,
+    h: 22,
     text: 'SpO2',
-    text_size: 14,
+    text_size: 16,
     color: COLOR_PURPLE,
     align_h: align.CENTER_H,
     align_v: align.CENTER_V
@@ -912,7 +913,7 @@ function createBottomWidgets() {
     w: BOTTOM_BLOCK_W,
     h: BOTTOM_VALUE_BOX_H,
     text: '--',
-    text_size: 18,
+    text_size: BOTTOM_VALUE_FONT,
     color: COLOR_WHITE,
     align_h: align.CENTER_H,
     align_v: align.CENTER_V
@@ -924,7 +925,7 @@ function createBottomWidgets() {
     w: BOTTOM_BLOCK_W,
     h: BOTTOM_LABEL_BOX_H,
     text: 'OXYGEN',
-    text_size: 11,
+    text_size: BOTTOM_LABEL_FONT,
     color: COLOR_GRAY,
     align_h: align.CENTER_H,
     align_v: align.CENTER_V
@@ -1168,15 +1169,6 @@ WatchFace({
     createDate()
     createBottomWidgets()
     createSectionDividers()
-
-    createWidget(widget.LINE, {
-      x1: 56,
-      y1: 230,
-      x2: 422,
-      y2: 230,
-      color: 0xffffff,
-      line_width: 2
-    })
 
     initSensors()
     startTimer()
