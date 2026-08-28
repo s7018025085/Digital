@@ -13,7 +13,7 @@ import { setInterval, clearInterval } from '@zos/timer'
 const SCREEN_W = 480
 const SCREEN_H = 480
 const CENTER_X = 240
-const CENTER_Y = 240  
+const CENTER_Y = 240 
 const R_SAFE = 228 // полезный радиус до того, как край экрана начнёт обрезать контент
 
 // Компактная верхняя статистика, вдохновлённая тремя маленькими
@@ -126,9 +126,8 @@ const COLOR_TRACK = 0x1c1f24
 const COLOR_GLOW = 0x14181d
 const COLOR_TICK_DIM = 0x30343a
 const COLOR_SHADOW = 0x000000
-const COLOR_DIVIDER = 0x2a2d34
-const FONT_LABEL = 'fonts/Onest-VariableFont_wght.ttf'
 const FONT_REGULAR = 'fonts/rostex.regular.ttf'
+const FONT_LABEL = 'fonts/Onest-VariableFont_wght.ttf'
 
 const RING_SEGMENTS = 8
 const RING_SEGMENT_ANGLE = 360 / RING_SEGMENTS
@@ -159,11 +158,6 @@ let caloriesValueWidget = null
 let caloriesRing = null
 
 let bottomStepsValueWidget = null
-
-let weatherSensor = null
-let weatherValueWidget = null
-let weatherIconWidget = null
-let weatherCode = -1
 
 let mainTimer = null
 
@@ -353,6 +347,12 @@ function drawPulseIcon(cx, cy, color) {
     [cx + 2, cy + 7], [cx + 5, cy], [cx + 11, cy]
   ]
   for (let i = 0; i < pts.length - 1; i++) {
+    createWidget(widget.LINE, {
+      x1: pts[i][0], y1: pts[i][1],
+      x2: pts[i + 1][0], y2: pts[i + 1][1],
+      color,
+      line_width: 2
+    })
   }
 }
 
@@ -364,6 +364,11 @@ function drawStepsIcon(cx, cy, color) {
     radius: 3,
     color
   })
+  createWidget(widget.LINE, { x1: cx + 1, y1: cy - 5, x2: cx - 2, y2: cy + 3, color, line_width: 2 })
+  createWidget(widget.LINE, { x1: cx - 2, y1: cy + 3, x2: cx - 7, y2: cy + 7, color, line_width: 2 })
+  createWidget(widget.LINE, { x1: cx - 2, y1: cy + 3, x2: cx + 4, y2: cy + 6, color, line_width: 2 })
+  createWidget(widget.LINE, { x1: cx + 1, y1: cy - 3, x2: cx + 8, y2: cy - 1, color, line_width: 2 })
+  createWidget(widget.LINE, { x1: cx + 1, y1: cy - 3, x2: cx - 5, y2: cy - 6, color, line_width: 2 })
 }
 
 // Глиф батарейки: контур корпуса + клемма-выступ.
@@ -387,6 +392,16 @@ function drawCalorieIcon(cx, cy, color) {
     center_y: cy + 3,
     radius: 6,
     color
+  })
+  createWidget(widget.LINE, {
+    x1: cx - 4, y1: cy + 1,
+    x2: cx + 3, y2: cy - 9,
+    color, line_width: 3
+  })
+  createWidget(widget.LINE, {
+    x1: cx + 3, y1: cy - 9,
+    x2: cx + 6, y2: cy + 1,
+    color, line_width: 3
   })
 }
 
@@ -766,8 +781,8 @@ function createSectionDividers() {
       y1: yPositions[i],
       x2: SECTION_LINE_X + SECTION_LINE_W,
       y2: yPositions[i],
-      color: COLOR_DIVIDER,
-      line_width: 3
+      color: COLOR_TRACK,
+      line_width: 2
     })
   }
 }
@@ -791,30 +806,22 @@ function createDate() {
 // НИЖНИЕ ВИДЖЕТЫ (Погода / Активность / Шаги)
 // ============================================================
 
-const WEATHER_ICON_BASE = 'icons/weather/Weather_'
-
-function updateWeatherIcon(index) {
-  const idx = clamp(index, 0, 28)
-  if (weatherIconWidget && idx !== weatherCode) {
-    weatherCode = idx
-    weatherIconWidget.setProperty(prop.SRC, WEATHER_ICON_BASE + (idx + 1) + '.png')
-  }
-}
-
 function createBottomWidgets() {
   const halfW = BOTTOM_BLOCK_W / 2
 
   // --- Погода (слева) ---
-  weatherIconWidget = createWidget(widget.IMG, {
-    x: 105,
-    y: 320,
-    w: 48,
-    h: 48,
-    src: WEATHER_ICON_BASE + '26.png',
-    auto_scale: true
+  createWidget(widget.ARC, {
+    x: WEATHER_CX - 10,
+    y: BOTTOM_ICON_CY - 10,
+    w: 20,
+    h: 20,
+    start_angle: -90,
+    end_angle: 230,
+    color: COLOR_GRAY,
+    line_width: 3
   })
 
-  weatherValueWidget = createText({
+  createText({
     x: WEATHER_CX - halfW,
     y: BOTTOM_VALUE_CY - 12,
     w: BOTTOM_BLOCK_W,
@@ -897,8 +904,6 @@ function createBottomWidgets() {
     align_h: align.CENTER_H,
     align_v: align.CENTER_V
   })
-
-  
 }
 
 // ============================================================
@@ -910,7 +915,7 @@ let lastRenderedDay = -1
 function updateTime() {
   const now = new Date()
   const hh = twoDigits(now.getHours())
-  const mm = twoDigits(now.getMinutes())  
+  const mm = twoDigits(now.getMinutes())
   const ss = now.getSeconds()
 
   const timeStr = hh + ':' + mm
@@ -978,21 +983,8 @@ function updateSteps(current) {
 // ============================================================
 
 function updateBattery(pct) {
-}
-
-function updateWeatherFromSensor() {
-  if (!weatherSensor) return
-  try {
-    const curTemp = weatherSensor.current
-    if (curTemp !== undefined && curTemp !== null) {
-      weatherValueWidget.setProperty(prop.TEXT, Math.round(curTemp) + '°')
-    }
-    const curIdx = weatherSensor.curAirIconIndex
-    if (curIdx !== undefined && curIdx !== null && curIdx >= 0 && curIdx <= 28) {
-      updateWeatherIcon(Number(curIdx))
-    }
-  } catch (e) {
-  }
+// Батарея больше не показывается в верхнем ряду; калории там вычисляются
+// из шагов. Датчик остаётся подписанным для будущего использования.
 }
 
 // ============================================================
@@ -1004,8 +996,7 @@ function initSensors() {
   stepSensor = new Step()
   batterySensor = new Battery()
 
-  try { weatherSensor = hmSensor.createSensor(hmSensor.id.WEATHER); } catch(e) { weatherSensor = null; }
-
+  // Начальные значения
   updateHeartRate(heartRateSensor.getCurrent ? heartRateSensor.getCurrent() : 0)
 
   const initialSteps = stepSensor.getCurrent ? stepSensor.getCurrent() : 0
@@ -1016,8 +1007,6 @@ function initSensors() {
   updateSteps(initialSteps)
 
   updateBattery(batterySensor.getCurrent ? batterySensor.getCurrent() : 0)
-
-  updateWeatherFromSensor()
 
   onHrChange = () => {
     updateHeartRate(heartRateSensor.getCurrent())
@@ -1060,7 +1049,6 @@ function startTimer() {
   updateTime()
   mainTimer = setInterval(() => {
     updateTime()
-    updateWeatherFromSensor()
   }, 500)
 }
 
@@ -1089,15 +1077,6 @@ WatchFace({
     createDate()
     createBottomWidgets()
     createSectionDividers()
-
-    createWidget(widget.LINE, {
-      x1: 56,
-      y1: 230,
-      x2: 422,
-      y2: 230,
-      color: 0xffffff,
-      line_width: 2
-    })
 
     initSensors()
     startTimer()

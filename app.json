@@ -14,7 +14,8 @@
   },
   "permissions": [
     "data:user.hd.heart_rate",
-    "data:user.hd.step"
+    "data:user.hd.step",
+    "data:weather"
   ],
   "runtime": {
     "apiVersion": {

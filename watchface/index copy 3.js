@@ -3,30 +3,28 @@ import { HeartRate, Step, Battery } from '@zos/sensor'
 import { setInterval, clearInterval } from '@zos/timer'
 
 // ============================================================
-// МАКЕТ
+// LAYOUT
 // ============================================================
-// Все позиции ниже проверены вручную относительно радиуса
-// безопасной зоны круглого экрана (R_SAFE), чтобы ничего не
-// обрезалось корпусом. Если двигаете элементы, держите их
-// внутри R_SAFE от CENTER_X/CENTER_Y.
+// All positions below are hand-checked against the round display's
+// safe-circle radius (R_SAFE) so nothing gets clipped by the bezel.
+// If you move anything, keep it inside R_SAFE from CENTER_X/CENTER_Y.
 
 const SCREEN_W = 480
 const SCREEN_H = 480
 const CENTER_X = 240
-const CENTER_Y = 240  
-const R_SAFE = 228 // полезный радиус до того, как край экрана начнёт обрезать контент
+const CENTER_Y = 240
+const R_SAFE = 228 // usable radius before the round edge starts cutting content
 
-// Компактная верхняя статистика, вдохновлённая тремя маленькими
-// циферблатами из образца. Подъём вверх оставляет чистый визуальный
-// зазор перед увеличенным отображением времени.
+// Compact top statistics, inspired by the three small dials in the reference.
+// Moving them up leaves a clear visual gap before the enlarged time display.
 const TOP_CY = 95
 const TOP_R = 29
 const TOP_GLOW_R = 32
 const TOP_LINE_W = 5
 
-// Иконки остаются внутри своих циферблатов; значения и подписи
-// образуют две чёткие строки прямо под ними, как в образце.
-const TOP_ICON_CY = TOP_CY + 1
+// Icons stay inside their dials; values and captions form two clear rows
+// directly underneath, as in the reference layout.
+const TOP_ICON_CY = TOP_CY - 9
 const TOP_VALUE_CY = TOP_CY + TOP_R + 16
 const TOP_LABEL_CY = TOP_VALUE_CY + 21
 
@@ -34,41 +32,40 @@ const HR_CX = 160
 const STEPS_CX = 240
 const BAT_CX = 320
 
-// Основное время — собрано как одна центрированная строка: [HH:MM] [:] [S-десятки] [S-единицы]
-// HH:MM выровнено по правому краю внутри своего блока, поэтому не нужно
-// угадывать его точную отрисованную ширину — последний символ всегда
-// прижат к TIME_HHMM_RIGHT независимо от метрик шрифта. Две цифры секунд —
-// блоки фиксированной ширины с центрированным текстом, поэтому одиночные
-// глифы тоже всегда центрированы. Только общая зарезервированная ширина
-// (TIME_HHMM_BOX_W и т.д.) — примерная оценка для центрирования всей строки;
-// если строка сдвинута влево/вправо целиком, подправьте TIME_HHMM_BOX_W ниже.
+// Main time - assembled as one centered row: [HH:MM] [:] [S-tens] [S-units]
+// HH:MM is right-aligned inside its own box so we never have to guess its
+// exact rendered width - the last character always sits flush against
+// TIME_HHMM_RIGHT regardless of font metrics. The two seconds digits are
+// fixed-width boxes with centered text, so single glyphs are always
+// centered too. Only the total reserved width (TIME_HHMM_BOX_W etc.) is a
+// rough estimate for centering the whole row - if the row looks shifted
+// left/right as a whole, tweak TIME_HHMM_BOX_W below.
 const TIME_CY = 214
-// У Rostex широкие глифы, поэтому эти размеры резервируют достаточно места
-// для полной строки HH:MM:SS на экране 480 px без обрезки первой цифры.
+// Rostex has wide glyphs, so these dimensions reserve enough room for the
+// complete HH:MM:SS row on a 480 px screen without clipping its first digit.
 const TIME_FONT_SIZE = 58
 const TIME_SHADOW_OFFSET = 2
 const TIME_ROW_H = TIME_FONT_SIZE + 20
 
-// Мягкое свечение за временем: несколько тусклых копий со смещением 1-2px
-// в каждую сторону, нарисованных под тенью/основным текстом. Дешёвая
-// имитация свечения — у виджетов текста Zepp OS нет альфа-смешивания,
-// поэтому настоящее размытие невозможно.
+// Soft glow behind the time: a handful of dim copies offset by 1-2px in
+// each direction, drawn under the shadow/main text. Cheap fake bloom -
+// Zepp OS text widgets have no alpha blending, so we can't do a real blur.
 const TIME_GLOW_COLOR = 0x0b5b6d
 const TIME_GLOW_OFFSETS = [
   [-2, 0], [2, 0], [0, -2], [0, 2],
   [-1, -1], [1, -1], [-1, 1], [1, 1]
 ]
 
-// Оставляем большой запас для широких глифов HH:MM в Rostex; иначе Zepp OS
-// посчитает текст выходящим за пределы и запустит бегущую строку.
+// Leave generous room for Rostex's wide HH:MM glyphs; otherwise Zepp OS
+// treats the text as overflowing and starts its marquee animation.
 const TIME_HHMM_BOX_W = 260
 const TIME_COLON_W = 24
 const TIME_SEC_DIGIT_W = 56
 const TIME_ROLL_MASK_PADDING = 16
 
 const TIME_ROW_TOTAL_W = TIME_HHMM_BOX_W + TIME_COLON_W + TIME_SEC_DIGIT_W * 2
-// Глифы HH:MM в Rostex визуально тяжелее справа, поэтому небольшая
-// оптическая поправка держит отображаемое время по центру круглого экрана.
+// Rostex's HH:MM glyphs carry more visual weight on the right, so a small
+// optical correction keeps the rendered time centered on the round display.
 const TIME_ROW_LEFT = CENTER_X - TIME_ROW_TOTAL_W / 2 - 10
 
 const TIME_HHMM_X = TIME_ROW_LEFT
@@ -77,26 +74,26 @@ const TIME_COLON_X = TIME_HHMM_RIGHT
 const TIME_SEC_TENS_X = TIME_COLON_X + TIME_COLON_W
 const TIME_SEC_UNITS_X = TIME_SEC_TENS_X + TIME_SEC_DIGIT_W
 
-// Тайминги анимации «механического счётчика» с прокруткой цифр
+// Rolling-digit "mechanical odometer" animation timing
 const ROLL_DURATION_MS = 260
 const ROLL_STEP_MS = 26
 const ROLL_STEPS = Math.round(ROLL_DURATION_MS / ROLL_STEP_MS)
 
-// Блок даты — день недели и дата теперь рисуются одной центрированной строкой
-const DATE_LINE_CY = 270
-const DATE_LINE_FONT_SIZE = 24
+// Date block - weekday + date now render as a single centered line
+const DATE_LINE_CY = 290
+const DATE_LINE_FONT_SIZE = 16
 
-// Незаметные горизонтальные разделители визуально отделяют компактную
-// верхнюю статистику, время и дату, не конкурируя с метками на корпусе.
+// Subtle horizontal dividers keep the compact upper statistics, time and
+// date visually separated without competing with the bezel tick marks.
 const SECTION_LINE_X = 78
 const SECTION_LINE_W = SCREEN_W - SECTION_LINE_X * 2
 const TOP_TIME_LINE_Y = 168
 const TIME_DATE_LINE_Y = 264
 const DATE_BOTTOM_LINE_Y = 318
 
-// Нижние информационные блоки (расположены близко и приподняты, чтобы
-// круглый край не обрезал подписи — это самый плотный ряд на экране)
-const BOTTOM_ICON_CY = 382
+// Bottom info blocks (kept close together + raised so the round
+// edge doesn't clip the labels, which is the tightest row on screen)
+const BOTTOM_ICON_CY = 372
 const BOTTOM_VALUE_CY = 390
 const BOTTOM_LABEL_CY = 410
 const BOTTOM_BLOCK_W = 96
@@ -105,12 +102,12 @@ const WEATHER_CX = 134
 const ACTIVITY_CX = 240
 const STEPS2_CX = 346
 
-// Метки на корпусе
+// Bezel ticks
 const TICK_R = 222
 const TICK_R_OUTER = 234
 
 // ============================================================
-// ЦВЕТА
+// COLORS
 // ============================================================
 
 const COLOR_BG = 0x05070a
@@ -126,8 +123,6 @@ const COLOR_TRACK = 0x1c1f24
 const COLOR_GLOW = 0x14181d
 const COLOR_TICK_DIM = 0x30343a
 const COLOR_SHADOW = 0x000000
-const COLOR_DIVIDER = 0x2a2d34
-const FONT_LABEL = 'fonts/Onest-VariableFont_wght.ttf'
 const FONT_REGULAR = 'fonts/rostex.regular.ttf'
 
 const RING_SEGMENTS = 8
@@ -135,7 +130,7 @@ const RING_SEGMENT_ANGLE = 360 / RING_SEGMENTS
 const RING_SEGMENT_GAP = 4
 
 // ============================================================
-// СОСТОЯНИЕ
+// STATE
 // ============================================================
 
 let timeWidget = null
@@ -160,11 +155,6 @@ let caloriesRing = null
 
 let bottomStepsValueWidget = null
 
-let weatherSensor = null
-let weatherValueWidget = null
-let weatherIconWidget = null
-let weatherCode = -1
-
 let mainTimer = null
 
 let heartRateSensor = null
@@ -186,7 +176,7 @@ const WEEKDAYS = [
 ]
 
 // ============================================================
-// ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
+// HELPERS
 // ============================================================
 
 function clamp(value, min, max) {
@@ -196,7 +186,7 @@ function clamp(value, min, max) {
 }
 
 function createText(options) {
-  options.font = options.font || FONT_LABEL
+  options.font = FONT_REGULAR
   return createWidget(widget.TEXT, options)
 }
 
@@ -224,7 +214,7 @@ function lerpColor(colorA, colorB, t) {
   return (r << 16) | (g << 8) | b
 }
 
-// Помощник градиента с 3 остановками: colorA -> colorB -> colorC при t от 0 до 1
+// 3-stop gradient helper: colorA -> colorB -> colorC as t goes 0 -> 1
 function triColor(t, colorA, colorB, colorC) {
   const clamped = clamp(t, 0, 1)
   if (clamped < 0.5) {
@@ -246,7 +236,7 @@ function batteryGradient(t) {
 }
 
 // ============================================================
-// ФОН
+// BACKGROUND
 // ============================================================
 
 function createBackground() {
@@ -258,21 +248,54 @@ function createBackground() {
     color: COLOR_BG
   })
 
+  // Thin decorative outer ring
+  createWidget(widget.ARC, {
+    x: CENTER_X - TICK_R_OUTER,
+    y: CENTER_Y - TICK_R_OUTER,
+    w: TICK_R_OUTER * 2,
+    h: TICK_R_OUTER * 2,
+    start_angle: -90,
+    end_angle: 270,
+    color: COLOR_TRACK,
+    line_width: 2
+  })
+
+  createTicks()
+}
+
+// 12 short hour ticks around the bezel; 12/3/6/9 slightly brighter/thicker.
+function createTicks() {
+  for (let i = 0; i < 12; i++) {
+    const angle = -90 + i * 30
+    const isCardinal = i % 3 === 0
+    const halfWidth = isCardinal ? 2 : 1.2
+
+    createWidget(widget.ARC, {
+      x: CENTER_X - TICK_R,
+      y: CENTER_Y - TICK_R,
+      w: TICK_R * 2,
+      h: TICK_R * 2,
+      start_angle: angle - halfWidth,
+      end_angle: angle + halfWidth,
+      color: isCardinal ? COLOR_GRAY : COLOR_TICK_DIM,
+      line_width: isCardinal ? 4 : 2
+    })
+  }
 }
 
 // ============================================================
-// ФАБРИКА ГРАДИЕНТНЫХ КОЛЕЦ
+// GRADIENT RING FACTORY
 // ============================================================
-// Виджеты ARC в Zepp OS принимают только один сплошной цвет, поэтому
-// плавный градиент имитируется N короткими дугами, каждая заранее
-// окрашена вдоль градиента. При обновлении мы лишь переключаем сегменты
-// между цветом градиента (горит) и цветом дорожки (не горит) — без
-// пересоздания, только setProperty, поэтому анимация дёшева.
+// Zepp OS ARC widgets only take a single solid color each, so a smooth
+// gradient sweep is faked with N short arc segments, each pre-colored
+// along the gradient. On update we only flip segments between their
+// gradient color (lit) and the track color (unlit) - no re-creation,
+// just setProperty, so it's cheap to animate.
 
 function createGradientRing(cx, cy, r, glowR, lineWidth, gradientFn) {
   const startAngle = -90
 
-  // Мягкое внешнее свечение — один тусклый, чуть больший круг за всем.
+  // Soft outer halo - a single dim, slightly larger ring behind everything.
   createWidget(widget.ARC, {
     x: cx - glowR,
     y: cy - glowR,
@@ -284,7 +307,7 @@ function createGradientRing(cx, cy, r, glowR, lineWidth, gradientFn) {
     line_width: 3
   })
 
-  // Фоновая дорожка.
+  // Background track.
   createWidget(widget.ARC, {
     x: cx - r,
     y: cy - r,
@@ -330,7 +353,7 @@ function updateGradientRing(ring, ratio) {
 }
 
 // ============================================================
-// ВЕРХНИЕ ИКОНКИ
+// TOP ICONS
 // ============================================================
 
 const TOP_SPRITE_ICON_SIZE = 40
@@ -346,17 +369,23 @@ function drawTopSpriteIcon(cx, cy, src) {
   })
 }
 
-// Глиф пульса: маленькая зигзагообразная линия в стиле ЭКГ.
+// Heartbeat / pulse glyph: a small ECG-style zigzag line.
 function drawPulseIcon(cx, cy, color) {
   const pts = [
     [cx - 11, cy], [cx - 5, cy], [cx - 2, cy - 7],
     [cx + 2, cy + 7], [cx + 5, cy], [cx + 11, cy]
   ]
   for (let i = 0; i < pts.length - 1; i++) {
+    createWidget(widget.LINE, {
+      x1: pts[i][0], y1: pts[i][1],
+      x2: pts[i + 1][0], y2: pts[i + 1][1],
+      color,
+      line_width: 2
+    })
   }
 }
 
-// Глиф идущего человечка для шагов: голова + туловище + ноги + руки.
+// Walking-figure glyph for steps: head + torso + legs + arms.
 function drawStepsIcon(cx, cy, color) {
   createWidget(widget.CIRCLE, {
     center_x: cx + 2,
@@ -364,9 +393,14 @@ function drawStepsIcon(cx, cy, color) {
     radius: 3,
     color
   })
+  createWidget(widget.LINE, { x1: cx + 1, y1: cy - 5, x2: cx - 2, y2: cy + 3, color, line_width: 2 })
+  createWidget(widget.LINE, { x1: cx - 2, y1: cy + 3, x2: cx - 7, y2: cy + 7, color, line_width: 2 })
+  createWidget(widget.LINE, { x1: cx - 2, y1: cy + 3, x2: cx + 4, y2: cy + 6, color, line_width: 2 })
+  createWidget(widget.LINE, { x1: cx + 1, y1: cy - 3, x2: cx + 8, y2: cy - 1, color, line_width: 2 })
+  createWidget(widget.LINE, { x1: cx + 1, y1: cy - 3, x2: cx - 5, y2: cy - 6, color, line_width: 2 })
 }
 
-// Глиф батарейки: контур корпуса + клемма-выступ.
+// Battery-cell glyph: outline body + terminal cap.
 function drawBatteryIcon(cx, cy, color) {
   createWidget(widget.STROKE_RECT, {
     x: cx - 12, y: cy - 6, w: 22, h: 12,
@@ -380,7 +414,7 @@ function drawBatteryIcon(cx, cy, color) {
   })
 }
 
-// Глиф пламени для калорий: простая залитая фигурка с острым язычком огня.
+// Flame glyph for calories: a simple filled ember with a pointed flame tip.
 function drawCalorieIcon(cx, cy, color) {
   createWidget(widget.CIRCLE, {
     center_x: cx,
@@ -388,40 +422,50 @@ function drawCalorieIcon(cx, cy, color) {
     radius: 6,
     color
   })
+  createWidget(widget.LINE, {
+    x1: cx - 4, y1: cy + 1,
+    x2: cx + 3, y2: cy - 9,
+    color, line_width: 3
+  })
+  createWidget(widget.LINE, {
+    x1: cx + 3, y1: cy - 9,
+    x2: cx + 6, y2: cy + 1,
+    color, line_width: 3
+  })
 }
 
 // ============================================================
-// ВЕРХНИЕ ВИДЖЕТЫ (Пульс / Шаги / Батарея)
+// TOP WIDGETS (Pulse / Steps / Battery)
 // ============================================================
-// Каждый индикатор: компактное кольцо -> внутри стек [иконка][значение], подпись снизу.
+// Each indicator: compact ring -> [icon][value] stacked inside, caption below.
 
 function createTopWidgets() {
   const halfW = TOP_R * 2
   const labelW = 78
 
-  // Шаги расположены над тремя циферблатами, как просили.
+  // Steps sit above the three dials, as requested.
   createText({
     x: 0, y: 28, w: SCREEN_W, h: 14,
-    text: 'ШАГИ', text_size: 12, color: COLOR_GRAY,
+    text: 'STEPS', text_size: 10, color: COLOR_GRAY,
     align_h: align.CENTER_H, align_v: align.CENTER_V
   })
   topStepsWidget = createText({
-    x: 0, y: 40, w: SCREEN_W, h: 20,
-    text: '0', text_size: 20, color: COLOR_WHITE,
+    x: 0, y: 42, w: SCREEN_W, h: 18,
+    text: '0', text_size: 14, color: COLOR_WHITE,
     align_h: align.CENTER_H, align_v: align.CENTER_V
   })
 
-  // --- Кольцо пульса ---
+  // --- Heart rate ring ---
   hrRing = createGradientRing(HR_CX, TOP_CY, TOP_R, TOP_GLOW_R, TOP_LINE_W, heartRateGradient)
   drawTopSpriteIcon(HR_CX, TOP_ICON_CY, 'icons/heart-rate.png')
 
   hrValueWidget = createText({
     x: HR_CX - TOP_R,
-    y: TOP_VALUE_CY - 13,
+    y: TOP_VALUE_CY - 11,
     w: halfW,
-    h: 26,
+    h: 22,
     text: '--',
-    text_size: 22,
+    text_size: 18,
     color: COLOR_WHITE,
     align_h: align.CENTER_H,
     align_v: align.CENTER_V
@@ -439,17 +483,17 @@ function createTopWidgets() {
     align_v: align.CENTER_V
   })
 
-  // --- Кольцо шагов ---
+  // --- Steps ring ---
   stepsRing = createGradientRing(STEPS_CX, TOP_CY, TOP_R, TOP_GLOW_R, TOP_LINE_W, stepsGradient)
   drawTopSpriteIcon(STEPS_CX, TOP_ICON_CY, 'icons/steps.png')
 
   distanceValueWidget = createText({
     x: STEPS_CX - TOP_R,
-    y: TOP_VALUE_CY - 13,
+    y: TOP_VALUE_CY - 11,
     w: halfW,
-    h: 26,
+    h: 22,
     text: '0.00',
-    text_size: 22,
+    text_size: 17,
     color: COLOR_WHITE,
     align_h: align.CENTER_H,
     align_v: align.CENTER_V
@@ -467,17 +511,17 @@ function createTopWidgets() {
     align_v: align.CENTER_V
   })
 
-  // --- Кольцо батареи ---
+  // --- Battery ring ---
   caloriesRing = createGradientRing(BAT_CX, TOP_CY, TOP_R, TOP_GLOW_R, TOP_LINE_W, batteryGradient)
   drawTopSpriteIcon(BAT_CX, TOP_ICON_CY, 'icons/calories.png')
 
   caloriesValueWidget = createText({
     x: BAT_CX - TOP_R,
-    y: TOP_VALUE_CY - 13,
+    y: TOP_VALUE_CY - 11,
     w: halfW,
-    h: 26,
+    h: 22,
     text: '0',
-    text_size: 22,
+    text_size: 17,
     color: COLOR_WHITE,
     align_h: align.CENTER_H,
     align_v: align.CENTER_V
@@ -498,14 +542,14 @@ function createTopWidgets() {
 }
 
 // ============================================================
-// ОСНОВНОЕ ВРЕМЯ
+// MAIN TIME
 // ============================================================
 
 function createMainTime() {
   const boxY = TIME_CY - TIME_ROW_H / 2
 
-// Мягкое свечение за блоком HH:MM — несколько тусклых смещённых копий,
-// нарисованных первыми, чтобы слои тени/основного текста легли сверху чисто.
+  // Soft glow behind the HH:MM block - several dim offset copies, drawn
+  // first so the shadow/main text layers land cleanly on top.
   timeGlowWidgets = []
   for (let i = 0; i < TIME_GLOW_OFFSETS.length; i++) {
     const [dx, dy] = TIME_GLOW_OFFSETS[i]
@@ -516,7 +560,6 @@ function createMainTime() {
       h: TIME_ROW_H,
       text: '00:00',
       text_size: TIME_FONT_SIZE,
-      font: FONT_REGULAR,
       color: TIME_GLOW_COLOR,
       align_h: align.RIGHT,
       align_v: align.CENTER_V
@@ -524,7 +567,7 @@ function createMainTime() {
     timeGlowWidgets.push(glow)
   }
 
-  // Псевдо-тень для блока HH:MM только (упрощённо).
+  // Pseudo drop-shadow for the HH:MM block only (kept simple).
   timeShadowWidget = createText({
     x: TIME_HHMM_X + TIME_SHADOW_OFFSET,
     y: boxY + TIME_SHADOW_OFFSET,
@@ -532,7 +575,6 @@ function createMainTime() {
     h: TIME_ROW_H,
     text: '00:00',
     text_size: TIME_FONT_SIZE,
-    font: FONT_REGULAR,
     color: COLOR_SHADOW,
     align_h: align.RIGHT,
     align_v: align.CENTER_V
@@ -545,14 +587,13 @@ function createMainTime() {
     h: TIME_ROW_H,
     text: '00:00',
     text_size: TIME_FONT_SIZE,
-    font: FONT_REGULAR,
     color: COLOR_WHITE,
     align_h: align.RIGHT,
     align_v: align.CENTER_V
   })
 
-// Разделитель визуально относится к секундам, поэтому получает то же
-// маленькое голубое свечение, что и прокручивающиеся цифры.
+  // The separator belongs visually to the seconds, so it gets the same
+  // small cyan halo as the rolling digits.
   for (let i = 0; i < TIME_GLOW_OFFSETS.length; i++) {
     const [dx, dy] = TIME_GLOW_OFFSETS[i]
     createText({
@@ -562,7 +603,6 @@ function createMainTime() {
       h: TIME_ROW_H,
       text: ':',
       text_size: TIME_FONT_SIZE,
-      font: FONT_REGULAR,
       color: TIME_GLOW_COLOR,
       align_h: align.CENTER_H,
       align_v: align.CENTER_V
@@ -576,7 +616,6 @@ function createMainTime() {
     h: TIME_ROW_H,
     text: ':',
     text_size: TIME_FONT_SIZE,
-    font: FONT_REGULAR,
     color: COLOR_SEC,
     align_h: align.CENTER_H,
     align_v: align.CENTER_V
@@ -587,10 +626,10 @@ function createMainTime() {
   secTensSlot = createRollingDigit(TIME_SEC_TENS_X, boxY, TIME_SEC_DIGIT_W, TIME_ROW_H, Math.floor(ss / 10))
   secUnitsSlot = createRollingDigit(TIME_SEC_UNITS_X, boxY, TIME_SEC_DIGIT_W, TIME_ROW_H, ss % 10)
 
-// Маски: тонкие полосы цвета фона, нарисованные поверх слотов цифр,
-// скрывают всё, что выезжает выше/ниже видимого окна цифры во время
-// анимации прокрутки — благодаря этому получается настоящий барабан
-// счётчика, а не две переползающие друг через друга надписи.
+  // Masks: thin bars in the background color, drawn on top of the digit
+  // slots, that hide whatever slides above/below the visible digit window
+  // during the roll animation - this is what makes it look like a real
+  // odometer drum instead of two texts sliding past each other in the open.
   createWidget(widget.FILL_RECT, {
     x: TIME_SEC_TENS_X - TIME_ROLL_MASK_PADDING,
     y: boxY - TIME_ROW_H,
@@ -608,21 +647,21 @@ function createMainTime() {
 }
 
 // ============================================================
-// ПРОКРУЧИВАЮЩАЯСЯ ЦИФРА «СЧЁТЧИК»
+// ROLLING "ODOMETER" DIGIT
 // ============================================================
-// По два наложенных виджета TEXT на цифру: `current` (видимая) и `next`
-// (припаркована на высоту строки ниже, спрятана за нижней маской). При
-// смене значения обе сдвигаются вверх вместе за ROLL_STEPS кадров; маски,
-// созданные в createMainTime(), обрезают всё, что выходит за видимое окно,
-// поэтому читается как уходящая старая цифра и встающая на место новая —
-// как барабан механического счётчика.
+// Two stacked TEXT widgets per digit: `current` (visible) and `next`
+// (parked one row-height below, hidden behind the bottom mask). On a
+// value change both slide upward together over ROLL_STEPS frames; the
+// masks created in createMainTime() clip anything that overshoots the
+// visible window, so it reads as the old digit rolling away and the new
+// one rolling into place - like a mechanical counter drum.
 
 function createRollingDigit(x, y, w, h, initialValue) {
   const glowCurrent = []
   const glowNext = []
 
-// Эти копии должны иметь собственные позиции анимации, иначе неоновое
-// свечение останется позади, пока цифра прокручивается.
+  // These copies must have their own animation positions, otherwise the
+  // neon bloom would stay behind while the digit rolls.
   for (let i = 0; i < TIME_GLOW_OFFSETS.length; i++) {
     const [dx, dy] = TIME_GLOW_OFFSETS[i]
     glowCurrent.push(createText({
@@ -632,7 +671,6 @@ function createRollingDigit(x, y, w, h, initialValue) {
       h,
       text: String(initialValue),
       text_size: TIME_FONT_SIZE,
-      font: FONT_REGULAR,
       color: TIME_GLOW_COLOR,
       align_h: align.CENTER_H,
       align_v: align.CENTER_V
@@ -644,7 +682,6 @@ function createRollingDigit(x, y, w, h, initialValue) {
       h,
       text: String(initialValue),
       text_size: TIME_FONT_SIZE,
-      font: FONT_REGULAR,
       color: TIME_GLOW_COLOR,
       align_h: align.CENTER_H,
       align_v: align.CENTER_V
@@ -658,7 +695,6 @@ function createRollingDigit(x, y, w, h, initialValue) {
     h,
     text: String(initialValue),
     text_size: TIME_FONT_SIZE,
-    font: FONT_REGULAR,
     color: COLOR_SEC,
     align_h: align.CENTER_H,
     align_v: align.CENTER_V
@@ -671,7 +707,6 @@ function createRollingDigit(x, y, w, h, initialValue) {
     h,
     text: String(initialValue),
     text_size: TIME_FONT_SIZE,
-    font: FONT_REGULAR,
     color: COLOR_SEC,
     align_h: align.CENTER_H,
     align_v: align.CENTER_V
@@ -755,7 +790,7 @@ function ensureRollTimerRunning() {
 }
 
 // ============================================================
-// ДАТА
+// DATE
 // ============================================================
 
 function createSectionDividers() {
@@ -766,8 +801,8 @@ function createSectionDividers() {
       y1: yPositions[i],
       x2: SECTION_LINE_X + SECTION_LINE_W,
       y2: yPositions[i],
-      color: COLOR_DIVIDER,
-      line_width: 3
+      color: COLOR_TRACK,
+      line_width: 2
     })
   }
 }
@@ -788,33 +823,25 @@ function createDate() {
 }
 
 // ============================================================
-// НИЖНИЕ ВИДЖЕТЫ (Погода / Активность / Шаги)
+// BOTTOM WIDGETS (Weather / Activity / Steps)
 // ============================================================
-
-const WEATHER_ICON_BASE = 'icons/weather/Weather_'
-
-function updateWeatherIcon(index) {
-  const idx = clamp(index, 0, 28)
-  if (weatherIconWidget && idx !== weatherCode) {
-    weatherCode = idx
-    weatherIconWidget.setProperty(prop.SRC, WEATHER_ICON_BASE + (idx + 1) + '.png')
-  }
-}
 
 function createBottomWidgets() {
   const halfW = BOTTOM_BLOCK_W / 2
 
-  // --- Погода (слева) ---
-  weatherIconWidget = createWidget(widget.IMG, {
-    x: 105,
-    y: 320,
-    w: 48,
-    h: 48,
-    src: WEATHER_ICON_BASE + '26.png',
-    auto_scale: true
+  // --- Weather (left) ---
+  createWidget(widget.ARC, {
+    x: WEATHER_CX - 10,
+    y: BOTTOM_ICON_CY - 10,
+    w: 20,
+    h: 20,
+    start_angle: -90,
+    end_angle: 230,
+    color: COLOR_GRAY,
+    line_width: 3
   })
 
-  weatherValueWidget = createText({
+  createText({
     x: WEATHER_CX - halfW,
     y: BOTTOM_VALUE_CY - 12,
     w: BOTTOM_BLOCK_W,
@@ -838,7 +865,7 @@ function createBottomWidgets() {
     align_v: align.CENTER_V
   })
 
-  // --- Активность (центр) ---
+  // --- Activity (center) ---
   createWidget(widget.ARC, {
     x: ACTIVITY_CX - 10,
     y: BOTTOM_ICON_CY - 10,
@@ -862,7 +889,7 @@ function createBottomWidgets() {
     align_v: align.CENTER_V
   })
 
-  // --- Шаги (справа) ---
+  // --- Steps (right) ---
   createWidget(widget.ARC, {
     x: STEPS2_CX - 10,
     y: BOTTOM_ICON_CY - 10,
@@ -897,12 +924,10 @@ function createBottomWidgets() {
     align_h: align.CENTER_H,
     align_v: align.CENTER_V
   })
-
-  
 }
 
 // ============================================================
-// ОБНОВЛЕНИЕ: ВРЕМЯ / ДАТА
+// UPDATE: TIME / DATE
 // ============================================================
 
 let lastRenderedDay = -1
@@ -910,7 +935,7 @@ let lastRenderedDay = -1
 function updateTime() {
   const now = new Date()
   const hh = twoDigits(now.getHours())
-  const mm = twoDigits(now.getMinutes())  
+  const mm = twoDigits(now.getMinutes())
   const ss = now.getSeconds()
 
   const timeStr = hh + ':' + mm
@@ -941,7 +966,7 @@ function updateDate(now) {
 }
 
 // ============================================================
-// ОБНОВЛЕНИЕ: ПУЛЬС
+// UPDATE: HEART RATE
 // ============================================================
 
 function updateHeartRate(bpm) {
@@ -953,7 +978,7 @@ function updateHeartRate(bpm) {
 }
 
 // ============================================================
-// ОБНОВЛЕНИЕ: ШАГИ
+// UPDATE: STEPS
 // ============================================================
 
 let stepGoal = 10000
@@ -974,29 +999,16 @@ function updateSteps(current) {
 }
 
 // ============================================================
-// ОБНОВЛЕНИЕ: БАТАРЕЯ
+// UPDATE: BATTERY
 // ============================================================
 
 function updateBattery(pct) {
-}
-
-function updateWeatherFromSensor() {
-  if (!weatherSensor) return
-  try {
-    const curTemp = weatherSensor.current
-    if (curTemp !== undefined && curTemp !== null) {
-      weatherValueWidget.setProperty(prop.TEXT, Math.round(curTemp) + '°')
-    }
-    const curIdx = weatherSensor.curAirIconIndex
-    if (curIdx !== undefined && curIdx !== null && curIdx >= 0 && curIdx <= 28) {
-      updateWeatherIcon(Number(curIdx))
-    }
-  } catch (e) {
-  }
+  // Battery is no longer shown in the top row; calories are derived from
+  // steps there. The sensor remains subscribed for future use.
 }
 
 // ============================================================
-// ДАТЧИКИ
+// SENSORS
 // ============================================================
 
 function initSensors() {
@@ -1004,8 +1016,7 @@ function initSensors() {
   stepSensor = new Step()
   batterySensor = new Battery()
 
-  try { weatherSensor = hmSensor.createSensor(hmSensor.id.WEATHER); } catch(e) { weatherSensor = null; }
-
+  // Initial values
   updateHeartRate(heartRateSensor.getCurrent ? heartRateSensor.getCurrent() : 0)
 
   const initialSteps = stepSensor.getCurrent ? stepSensor.getCurrent() : 0
@@ -1016,8 +1027,6 @@ function initSensors() {
   updateSteps(initialSteps)
 
   updateBattery(batterySensor.getCurrent ? batterySensor.getCurrent() : 0)
-
-  updateWeatherFromSensor()
 
   onHrChange = () => {
     updateHeartRate(heartRateSensor.getCurrent())
@@ -1053,14 +1062,13 @@ function teardownSensors() {
 }
 
 // ============================================================
-// ТАЙМЕР
+// TIMER
 // ============================================================
 
 function startTimer() {
   updateTime()
   mainTimer = setInterval(() => {
     updateTime()
-    updateWeatherFromSensor()
   }, 500)
 }
 
@@ -1076,28 +1084,19 @@ function stopTimer() {
 }
 
 // ============================================================
-// ЖИЗНЕННЫЙ ЦИКЛ
+// LIFECYCLE
 // ============================================================
 
 WatchFace({
   build() {
     createBackground()
     createMainTime()
-// Маски прокручивающихся секунд находятся за верхними индикаторами, поэтому
-// они не могут перекрыть циферблат батареи во время анимации секунд.
+    // The rolling-seconds masks sit behind the top indicators, so they
+    // cannot cover the battery dial while the seconds animate.
     createTopWidgets()
     createDate()
-    createBottomWidgets()
     createSectionDividers()
-
-    createWidget(widget.LINE, {
-      x1: 56,
-      y1: 230,
-      x2: 422,
-      y2: 230,
-      color: 0xffffff,
-      line_width: 2
-    })
+    createBottomWidgets()
 
     initSensors()
     startTimer()

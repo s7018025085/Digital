@@ -353,6 +353,12 @@ function drawPulseIcon(cx, cy, color) {
     [cx + 2, cy + 7], [cx + 5, cy], [cx + 11, cy]
   ]
   for (let i = 0; i < pts.length - 1; i++) {
+    createWidget(widget.LINE, {
+      x1: pts[i][0], y1: pts[i][1],
+      x2: pts[i + 1][0], y2: pts[i + 1][1],
+      color,
+      line_width: 2
+    })
   }
 }
 
@@ -364,6 +370,11 @@ function drawStepsIcon(cx, cy, color) {
     radius: 3,
     color
   })
+  createWidget(widget.LINE, { x1: cx + 1, y1: cy - 5, x2: cx - 2, y2: cy + 3, color, line_width: 2 })
+  createWidget(widget.LINE, { x1: cx - 2, y1: cy + 3, x2: cx - 7, y2: cy + 7, color, line_width: 2 })
+  createWidget(widget.LINE, { x1: cx - 2, y1: cy + 3, x2: cx + 4, y2: cy + 6, color, line_width: 2 })
+  createWidget(widget.LINE, { x1: cx + 1, y1: cy - 3, x2: cx + 8, y2: cy - 1, color, line_width: 2 })
+  createWidget(widget.LINE, { x1: cx + 1, y1: cy - 3, x2: cx - 5, y2: cy - 6, color, line_width: 2 })
 }
 
 // Глиф батарейки: контур корпуса + клемма-выступ.
@@ -387,6 +398,16 @@ function drawCalorieIcon(cx, cy, color) {
     center_y: cy + 3,
     radius: 6,
     color
+  })
+  createWidget(widget.LINE, {
+    x1: cx - 4, y1: cy + 1,
+    x2: cx + 3, y2: cy - 9,
+    color, line_width: 3
+  })
+  createWidget(widget.LINE, {
+    x1: cx + 3, y1: cy - 9,
+    x2: cx + 6, y2: cy + 1,
+    color, line_width: 3
   })
 }
 
@@ -806,8 +827,8 @@ function createBottomWidgets() {
 
   // --- Погода (слева) ---
   weatherIconWidget = createWidget(widget.IMG, {
-    x: 105,
-    y: 320,
+    x: WEATHER_CX - 16,
+    y: BOTTOM_ICON_CY - 16,
     w: 48,
     h: 48,
     src: WEATHER_ICON_BASE + '26.png',
@@ -897,8 +918,6 @@ function createBottomWidgets() {
     align_h: align.CENTER_H,
     align_v: align.CENTER_V
   })
-
-  
 }
 
 // ============================================================
@@ -910,7 +929,7 @@ let lastRenderedDay = -1
 function updateTime() {
   const now = new Date()
   const hh = twoDigits(now.getHours())
-  const mm = twoDigits(now.getMinutes())  
+  const mm = twoDigits(now.getMinutes())
   const ss = now.getSeconds()
 
   const timeStr = hh + ':' + mm
@@ -1089,15 +1108,6 @@ WatchFace({
     createDate()
     createBottomWidgets()
     createSectionDividers()
-
-    createWidget(widget.LINE, {
-      x1: 56,
-      y1: 230,
-      x2: 422,
-      y2: 230,
-      color: 0xffffff,
-      line_width: 2
-    })
 
     initSensors()
     startTimer()

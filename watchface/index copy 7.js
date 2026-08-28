@@ -1,6 +1,7 @@
 import { createWidget, widget, align, prop } from '@zos/ui'
 import { HeartRate, Step, Battery } from '@zos/sensor'
 import { setInterval, clearInterval } from '@zos/timer'
+import { weather as weatherModule } from '@zos/weather'
 
 // ============================================================
 // МАКЕТ
@@ -13,7 +14,7 @@ import { setInterval, clearInterval } from '@zos/timer'
 const SCREEN_W = 480
 const SCREEN_H = 480
 const CENTER_X = 240
-const CENTER_Y = 240  
+const CENTER_Y = 240 
 const R_SAFE = 228 // полезный радиус до того, как край экрана начнёт обрезать контент
 
 // Компактная верхняя статистика, вдохновлённая тремя маленькими
@@ -126,9 +127,8 @@ const COLOR_TRACK = 0x1c1f24
 const COLOR_GLOW = 0x14181d
 const COLOR_TICK_DIM = 0x30343a
 const COLOR_SHADOW = 0x000000
-const COLOR_DIVIDER = 0x2a2d34
-const FONT_LABEL = 'fonts/Onest-VariableFont_wght.ttf'
 const FONT_REGULAR = 'fonts/rostex.regular.ttf'
+const FONT_LABEL = 'fonts/Onest-VariableFont_wght.ttf'
 
 const RING_SEGMENTS = 8
 const RING_SEGMENT_ANGLE = 360 / RING_SEGMENTS
@@ -160,7 +160,6 @@ let caloriesRing = null
 
 let bottomStepsValueWidget = null
 
-let weatherSensor = null
 let weatherValueWidget = null
 let weatherIconWidget = null
 let weatherCode = -1
@@ -174,6 +173,7 @@ let batterySensor = null
 let onHrChange = null
 let onStepChange = null
 let onBatteryChange = null
+let onWeatherChange = null
 
 const WEEKDAYS = [
   'ВОСКРЕСЕНЬЕ',
@@ -353,6 +353,12 @@ function drawPulseIcon(cx, cy, color) {
     [cx + 2, cy + 7], [cx + 5, cy], [cx + 11, cy]
   ]
   for (let i = 0; i < pts.length - 1; i++) {
+    createWidget(widget.LINE, {
+      x1: pts[i][0], y1: pts[i][1],
+      x2: pts[i + 1][0], y2: pts[i + 1][1],
+      color,
+      line_width: 2
+    })
   }
 }
 
@@ -364,6 +370,11 @@ function drawStepsIcon(cx, cy, color) {
     radius: 3,
     color
   })
+  createWidget(widget.LINE, { x1: cx + 1, y1: cy - 5, x2: cx - 2, y2: cy + 3, color, line_width: 2 })
+  createWidget(widget.LINE, { x1: cx - 2, y1: cy + 3, x2: cx - 7, y2: cy + 7, color, line_width: 2 })
+  createWidget(widget.LINE, { x1: cx - 2, y1: cy + 3, x2: cx + 4, y2: cy + 6, color, line_width: 2 })
+  createWidget(widget.LINE, { x1: cx + 1, y1: cy - 3, x2: cx + 8, y2: cy - 1, color, line_width: 2 })
+  createWidget(widget.LINE, { x1: cx + 1, y1: cy - 3, x2: cx - 5, y2: cy - 6, color, line_width: 2 })
 }
 
 // Глиф батарейки: контур корпуса + клемма-выступ.
@@ -387,6 +398,16 @@ function drawCalorieIcon(cx, cy, color) {
     center_y: cy + 3,
     radius: 6,
     color
+  })
+  createWidget(widget.LINE, {
+    x1: cx - 4, y1: cy + 1,
+    x2: cx + 3, y2: cy - 9,
+    color, line_width: 3
+  })
+  createWidget(widget.LINE, {
+    x1: cx + 3, y1: cy - 9,
+    x2: cx + 6, y2: cy + 1,
+    color, line_width: 3
   })
 }
 
@@ -766,8 +787,8 @@ function createSectionDividers() {
       y1: yPositions[i],
       x2: SECTION_LINE_X + SECTION_LINE_W,
       y2: yPositions[i],
-      color: COLOR_DIVIDER,
-      line_width: 3
+      color: COLOR_TRACK,
+      line_width: 2
     })
   }
 }
@@ -793,8 +814,55 @@ function createDate() {
 
 const WEATHER_ICON_BASE = 'icons/weather/Weather_'
 
-function updateWeatherIcon(index) {
-  const idx = clamp(index, 0, 28)
+function mapWeatherCodeToIcon(code) {
+  if (code === null || code === undefined || code < 0) return 25
+  if (code === 800) return 3
+  if (code === 801) return 26
+  if (code === 802) return 0
+  if (code === 803 || code === 804) return 4
+  if (code >= 200 && code < 300) {
+    if (code === 202 || code === 212 || code === 221) return 22
+    if (code === 232) return 22
+    return 16
+  }
+  if (code >= 300 && code < 400) {
+    if (code === 302 || code === 312) return 11
+    return 6
+  }
+  if (code >= 500 && code < 600) {
+    if (code === 504 || code === 522 || code === 531) return 24
+    if (code === 502 || code === 503 || code === 520 || code === 521) return 10
+    if (code === 501) return 7
+    return 5
+  }
+  if (code >= 600 && code < 700) {
+    if (code === 602 || code === 622) return 9
+    if (code === 601 || code === 621) return 8
+    return 6
+  }
+  if (code >= 700 && code < 800) {
+    if (code === 731 || code === 751 || code === 761) return 17
+    if (code === 741) return 13
+    if (code === 721) return 14
+    return 13
+  }
+  if (code >= 800 && code < 900) {
+    if (code === 802) return 0
+    if (code === 803) return 4
+    if (code === 804) return 4
+    return 3
+  }
+  if (code === 900) return 15
+  if (code === 902 || code === 962) return 22
+  if (code === 901) return 16
+  if (code === 906) return 10
+  if (code >= 950 && code <= 959) return 3
+  if (code >= 960 && code <= 999) return 22
+  return 25
+}
+
+function updateWeatherIcon(code) {
+  const idx = mapWeatherCodeToIcon(code)
   if (weatherIconWidget && idx !== weatherCode) {
     weatherCode = idx
     weatherIconWidget.setProperty(prop.SRC, WEATHER_ICON_BASE + (idx + 1) + '.png')
@@ -806,10 +874,10 @@ function createBottomWidgets() {
 
   // --- Погода (слева) ---
   weatherIconWidget = createWidget(widget.IMG, {
-    x: 105,
-    y: 320,
-    w: 48,
-    h: 48,
+    x: WEATHER_CX - 12,
+    y: BOTTOM_ICON_CY - 12,
+    w: 24,
+    h: 24,
     src: WEATHER_ICON_BASE + '26.png',
     auto_scale: true
   })
@@ -897,8 +965,6 @@ function createBottomWidgets() {
     align_h: align.CENTER_H,
     align_v: align.CENTER_V
   })
-
-  
 }
 
 // ============================================================
@@ -910,7 +976,7 @@ let lastRenderedDay = -1
 function updateTime() {
   const now = new Date()
   const hh = twoDigits(now.getHours())
-  const mm = twoDigits(now.getMinutes())  
+  const mm = twoDigits(now.getMinutes())
   const ss = now.getSeconds()
 
   const timeStr = hh + ':' + mm
@@ -980,18 +1046,16 @@ function updateSteps(current) {
 function updateBattery(pct) {
 }
 
-function updateWeatherFromSensor() {
-  if (!weatherSensor) return
-  try {
-    const curTemp = weatherSensor.current
-    if (curTemp !== undefined && curTemp !== null) {
-      weatherValueWidget.setProperty(prop.TEXT, Math.round(curTemp) + '°')
-    }
-    const curIdx = weatherSensor.curAirIconIndex
-    if (curIdx !== undefined && curIdx !== null && curIdx >= 0 && curIdx <= 28) {
-      updateWeatherIcon(Number(curIdx))
-    }
-  } catch (e) {
+function updateWeather(data) {
+  if (!data) return
+  const temp = data.temp != null ? data.temp : data.temperature
+  const icon = data.icon != null ? data.icon : data.condition
+
+  if (weatherValueWidget && temp != null) {
+    weatherValueWidget.setProperty(prop.TEXT, Math.round(temp) + '°')
+  }
+  if (icon != null) {
+    updateWeatherIcon(Number(icon))
   }
 }
 
@@ -1004,8 +1068,7 @@ function initSensors() {
   stepSensor = new Step()
   batterySensor = new Battery()
 
-  try { weatherSensor = hmSensor.createSensor(hmSensor.id.WEATHER); } catch(e) { weatherSensor = null; }
-
+  // Начальные значения
   updateHeartRate(heartRateSensor.getCurrent ? heartRateSensor.getCurrent() : 0)
 
   const initialSteps = stepSensor.getCurrent ? stepSensor.getCurrent() : 0
@@ -1017,7 +1080,15 @@ function initSensors() {
 
   updateBattery(batterySensor.getCurrent ? batterySensor.getCurrent() : 0)
 
-  updateWeatherFromSensor()
+  onWeatherChange = () => {
+    updateWeather(weatherModule.getCurrent ? weatherModule.getCurrent() : null)
+  }
+
+  updateWeather(weatherModule.getCurrent ? weatherModule.getCurrent() : null)
+
+  if (weatherModule.onCurrentChange) {
+    weatherModule.onCurrentChange(onWeatherChange)
+  }
 
   onHrChange = () => {
     updateHeartRate(heartRateSensor.getCurrent())
@@ -1050,6 +1121,9 @@ function teardownSensors() {
   if (batterySensor && onBatteryChange && batterySensor.offChange) {
     batterySensor.offChange(onBatteryChange)
   }
+  if (weatherModule && onWeatherChange && weatherModule.offCurrentChange) {
+    weatherModule.offCurrentChange(onWeatherChange)
+  }
 }
 
 // ============================================================
@@ -1060,7 +1134,6 @@ function startTimer() {
   updateTime()
   mainTimer = setInterval(() => {
     updateTime()
-    updateWeatherFromSensor()
   }, 500)
 }
 
@@ -1089,15 +1162,6 @@ WatchFace({
     createDate()
     createBottomWidgets()
     createSectionDividers()
-
-    createWidget(widget.LINE, {
-      x1: 56,
-      y1: 230,
-      x2: 422,
-      y2: 230,
-      color: 0xffffff,
-      line_width: 2
-    })
 
     initSensors()
     startTimer()
