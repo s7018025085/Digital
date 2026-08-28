@@ -1,5 +1,5 @@
 import { createWidget, widget, align, prop } from '@zos/ui'
-import { HeartRate, Step, Battery } from '@zos/sensor'
+import { HeartRate, Step, Battery, SpO2 } from '@zos/sensor'
 import { setInterval, clearInterval } from '@zos/timer'
 
 // ============================================================
@@ -94,16 +94,26 @@ const TOP_TIME_LINE_Y = 168
 const TIME_DATE_LINE_Y = 264
 const DATE_BOTTOM_LINE_Y = 318
 
-// Нижние информационные блоки (расположены близко и приподняты, чтобы
-// круглый край не обрезал подписи — это самый плотный ряд на экране)
+// Нижние информационные блоки (Погода / Батарея / Кислород). Кольца ниже
+// повторяют стиль верхних, но компактнее и приподняты, чтобы круглый край
+// не обрезал значения и подписи — это самый плотный ряд на экране.
 const BOTTOM_ICON_CY = 382
 const BOTTOM_VALUE_CY = 390
 const BOTTOM_LABEL_CY = 410
 const BOTTOM_BLOCK_W = 96
 
+const BOTTOM_RING_CY = 356
+const BOTTOM_RING_R = 26
+const BOTTOM_RING_GLOW_R = 29
+const BOTTOM_RING_LINE_W = 4
+const BOTTOM_VALUE_BOX_Y = 386
+const BOTTOM_VALUE_BOX_H = 22
+const BOTTOM_LABEL_BOX_Y = 410
+const BOTTOM_LABEL_BOX_H = 16
+
 const WEATHER_CX = 134
-const ACTIVITY_CX = 240
-const STEPS2_CX = 346
+const BAT2_CX = 240
+const OXY_CX = 346
 
 // Метки на корпусе
 const TICK_R = 222
@@ -158,7 +168,11 @@ let stepsRing = null
 let caloriesValueWidget = null
 let caloriesRing = null
 
-let bottomStepsValueWidget = null
+let bottomBatteryValueWidget = null
+let bottomBatteryRing = null
+
+let bottomOxygenValueWidget = null
+let bottomOxygenRing = null
 
 let weatherSensor = null
 let weatherValueWidget = null
@@ -170,10 +184,12 @@ let mainTimer = null
 let heartRateSensor = null
 let stepSensor = null
 let batterySensor = null
+let spo2Sensor = null
 
 let onHrChange = null
 let onStepChange = null
 let onBatteryChange = null
+let onSpo2Change = null
 
 const WEEKDAYS = [
   'ВОСКРЕСЕНЬЕ',
@@ -243,6 +259,10 @@ function stepsGradient(t) {
 
 function batteryGradient(t) {
   return triColor(t, COLOR_RED, COLOR_YELLOW, COLOR_GREEN)
+}
+
+function oxygenGradient(t) {
+  return lerpColor(COLOR_PURPLE, COLOR_CYAN, clamp(t, 0, 1))
 }
 
 // ============================================================
@@ -838,67 +858,77 @@ function createBottomWidgets() {
     align_v: align.CENTER_V
   })
 
-  // --- Активность (центр) ---
-  createWidget(widget.ARC, {
-    x: ACTIVITY_CX - 10,
-    y: BOTTOM_ICON_CY - 10,
-    w: 20,
-    h: 20,
-    start_angle: -90,
-    end_angle: 180,
-    color: COLOR_CYAN,
-    line_width: 3
-  })
+  // --- Батарея (центр): кольцо в стиле верхних виджетов ---
+  bottomBatteryRing = createGradientRing(
+    BAT2_CX, BOTTOM_RING_CY, BOTTOM_RING_R, BOTTOM_RING_GLOW_R,
+    BOTTOM_RING_LINE_W, batteryGradient
+  )
+  drawBatteryIcon(BAT2_CX, BOTTOM_RING_CY, COLOR_GREEN)
 
-  createText({
-    x: ACTIVITY_CX - halfW,
-    y: BOTTOM_LABEL_CY - 10,
+  bottomBatteryValueWidget = createText({
+    x: BAT2_CX - halfW,
+    y: BOTTOM_VALUE_BOX_Y,
     w: BOTTOM_BLOCK_W,
-    h: 16,
-    text: 'ACTIVITY',
-    text_size: 11,
-    color: COLOR_GRAY,
-    align_h: align.CENTER_H,
-    align_v: align.CENTER_V
-  })
-
-  // --- Шаги (справа) ---
-  createWidget(widget.ARC, {
-    x: STEPS2_CX - 10,
-    y: BOTTOM_ICON_CY - 10,
-    w: 20,
-    h: 20,
-    start_angle: -90,
-    end_angle: 300,
-    color: COLOR_GREEN,
-    line_width: 3
-  })
-
-  bottomStepsValueWidget = createText({
-    x: STEPS2_CX - halfW,
-    y: BOTTOM_VALUE_CY - 12,
-    w: BOTTOM_BLOCK_W,
-    h: 22,
-    text: '0',
-    text_size: 20,
+    h: BOTTOM_VALUE_BOX_H,
+    text: '--',
+    text_size: 18,
     color: COLOR_WHITE,
     align_h: align.CENTER_H,
     align_v: align.CENTER_V
   })
 
   createText({
-    x: STEPS2_CX - halfW,
-    y: BOTTOM_LABEL_CY - 10,
+    x: BAT2_CX - halfW,
+    y: BOTTOM_LABEL_BOX_Y,
     w: BOTTOM_BLOCK_W,
-    h: 16,
-    text: 'STEPS',
+    h: BOTTOM_LABEL_BOX_H,
+    text: 'BATTERY',
     text_size: 11,
     color: COLOR_GRAY,
     align_h: align.CENTER_H,
     align_v: align.CENTER_V
   })
 
-  
+  // --- Кислород SpO2 (справа): кольцо в стиле верхних виджетов ---
+  bottomOxygenRing = createGradientRing(
+    OXY_CX, BOTTOM_RING_CY, BOTTOM_RING_R, BOTTOM_RING_GLOW_R,
+    BOTTOM_RING_LINE_W, oxygenGradient
+  )
+  createText({
+    x: OXY_CX - 32,
+    y: BOTTOM_RING_CY - 10,
+    w: 64,
+    h: 20,
+    text: 'SpO2',
+    text_size: 14,
+    color: COLOR_PURPLE,
+    align_h: align.CENTER_H,
+    align_v: align.CENTER_V
+  })
+
+  bottomOxygenValueWidget = createText({
+    x: OXY_CX - halfW,
+    y: BOTTOM_VALUE_BOX_Y,
+    w: BOTTOM_BLOCK_W,
+    h: BOTTOM_VALUE_BOX_H,
+    text: '--',
+    text_size: 18,
+    color: COLOR_WHITE,
+    align_h: align.CENTER_H,
+    align_v: align.CENTER_V
+  })
+
+  createText({
+    x: OXY_CX - halfW,
+    y: BOTTOM_LABEL_BOX_Y,
+    w: BOTTOM_BLOCK_W,
+    h: BOTTOM_LABEL_BOX_H,
+    text: 'OXYGEN',
+    text_size: 11,
+    color: COLOR_GRAY,
+    align_h: align.CENTER_H,
+    align_v: align.CENTER_V
+  })
 }
 
 // ============================================================
@@ -966,7 +996,6 @@ function updateSteps(current) {
   if (topStepsWidget) topStepsWidget.setProperty(prop.TEXT, String(value))
   distanceValueWidget.setProperty(prop.TEXT, distanceKm.toFixed(2))
   caloriesValueWidget.setProperty(prop.TEXT, String(calories))
-  bottomStepsValueWidget.setProperty(prop.TEXT, String(value))
 
   const ratio = clamp(value / stepGoal, 0, 1)
   updateGradientRing(stepsRing, ratio)
@@ -974,10 +1003,43 @@ function updateSteps(current) {
 }
 
 // ============================================================
-// ОБНОВЛЕНИЕ: БАТАРЕЯ
+// ОБНОВЛЕНИЕ: БАТАРЕЯ (нижний виджет)
 // ============================================================
 
 function updateBattery(pct) {
+  const value = pct && pct > 0 ? pct : 0
+  bottomBatteryValueWidget.setProperty(prop.TEXT, value > 0 ? value + '%' : '--')
+  updateGradientRing(bottomBatteryRing, clamp(value / 100, 0, 1))
+}
+
+// ============================================================
+// ОБНОВЛЕНИЕ: КИСЛОРОД SpO2 (нижний виджет)
+// ============================================================
+
+// Значение SpO2 приходит по-разному в зависимости от API/версии прошивки:
+// число, объект { value, time } или sensor.current — нормализуем все варианты.
+function readSpo2Value(sensor) {
+  if (!sensor) return 0
+  try {
+    let v
+    if (typeof sensor.getCurrent === 'function') {
+      v = sensor.getCurrent()
+    } else if (sensor.current !== undefined) {
+      v = sensor.current
+    }
+    if (v && typeof v === 'object') return v.value || 0
+    return v || 0
+  } catch (e) {
+    return 0
+  }
+}
+
+function updateOxygen(raw) {
+  const value = raw && raw > 0 && raw <= 100 ? Math.round(raw) : 0
+  bottomOxygenValueWidget.setProperty(prop.TEXT, value > 0 ? value + '%' : '--')
+  // Норма 95-100%: кольцо полностью загорается при 100%, начинает
+  // реагировать от 80% и ниже, чтобы просадка была заметна визуально.
+  updateGradientRing(bottomOxygenRing, clamp((value - 80) / 20, 0, 1))
 }
 
 function updateWeatherFromSensor() {
@@ -1004,6 +1066,12 @@ function initSensors() {
   stepSensor = new Step()
   batterySensor = new Battery()
 
+  try { spo2Sensor = new SpO2(); } catch(e) { spo2Sensor = null; }
+  if (!spo2Sensor) {
+    // Фолбэк на легаси-API hmSensor для старых прошивок.
+    try { spo2Sensor = hmSensor.createSensor(hmSensor.id.SENSOR_SPO2); } catch(e) { spo2Sensor = null; }
+  }
+
   try { weatherSensor = hmSensor.createSensor(hmSensor.id.WEATHER); } catch(e) { weatherSensor = null; }
 
   updateHeartRate(heartRateSensor.getCurrent ? heartRateSensor.getCurrent() : 0)
@@ -1017,6 +1085,8 @@ function initSensors() {
 
   updateBattery(batterySensor.getCurrent ? batterySensor.getCurrent() : 0)
 
+  updateOxygen(readSpo2Value(spo2Sensor))
+
   updateWeatherFromSensor()
 
   onHrChange = () => {
@@ -1028,6 +1098,9 @@ function initSensors() {
   onBatteryChange = () => {
     updateBattery(batterySensor.getCurrent())
   }
+  onSpo2Change = () => {
+    updateOxygen(readSpo2Value(spo2Sensor))
+  }
 
   if (heartRateSensor.onCurrentChange) {
     heartRateSensor.onCurrentChange(onHrChange)
@@ -1037,6 +1110,9 @@ function initSensors() {
   }
   if (batterySensor.onChange) {
     batterySensor.onChange(onBatteryChange)
+  }
+  if (spo2Sensor && spo2Sensor.onCurrentChange) {
+    try { spo2Sensor.onCurrentChange(onSpo2Change); } catch(e) {}
   }
 }
 
@@ -1049,6 +1125,9 @@ function teardownSensors() {
   }
   if (batterySensor && onBatteryChange && batterySensor.offChange) {
     batterySensor.offChange(onBatteryChange)
+  }
+  if (spo2Sensor && onSpo2Change && spo2Sensor.offCurrentChange) {
+    try { spo2Sensor.offCurrentChange(onSpo2Change); } catch(e) {}
   }
 }
 
