@@ -1,6 +1,17 @@
 import { createWidget, widget, align, prop } from '@zos/ui'
 import { HeartRate, Step, Battery, SpO2 } from '@zos/sensor'
 import { setInterval, clearInterval } from '@zos/timer'
+import {
+  launchApp,
+  SYSTEM_APP_HR,
+  SYSTEM_APP_STATUS,
+  SYSTEM_APP_WEATHER,
+  SYSTEM_APP_ALARM,
+  SYSTEM_APP_STOPWATCH,
+  SYSTEM_APP_SLEEP,
+  SYSTEM_APP_SPO2,
+  SYSTEM_APP_SETTING
+} from '@zos/router'
 
 // ============================================================
 // МАКЕТ
@@ -937,12 +948,15 @@ function createBottomWidgets() {
 // ============================================================
 // КЛИКАБЕЛЬНЫЕ ЗОНЫ («КНОПКИ»)
 // ============================================================
-// Невидимые IMG_CLICK-зоны поверх виджетов: по тапу система сама
-// открывает соответствующий экран (пульс, шаги, калории, погода,
-// батарея, кислород, будильник, секундомер, сон). IMG_CLICK показывает
-// src в момент нажатия — это PNG-подсветка точного размера зоны,
-// сгенерированная скриптом scripts/make-click-highlight.js.
-// Legacy-глобал hmUI доступен в watchface наряду с @zos/ui (как и hmSensor).
+// Невидимые BUTTON-кнопки поверх виджетов (новый API, работает и на
+// устройстве, и в симуляторе): по тапу открывается системное приложение
+// через launchApp(). Состояния кнопки заданы парой PNG точного размера
+// зоны (генерируются скриптом scripts/make-click-highlight.js):
+// normal_src — полностью прозрачный, press_src — мягкая подсветка,
+// видимая в момент нажатия.
+//
+// Шаги и калории открывают системную «Активность» (SYSTEM_APP_STATUS),
+// батарея — «Настройки» (отдельного системного приложения батареи нет).
 
 const CLICK_ZONE_W = 120                        // ширина кликабельной зоны колонки (= BOTTOM_BLOCK_W)
 
@@ -954,53 +968,56 @@ const DATE_ZONE_Y = TIME_DATE_LINE_Y + 1              // верх зоны ст�
 const DATE_ZONE_H = DATE_BOTTOM_LINE_Y - TIME_DATE_LINE_Y - 1 // высота зоны даты
 const DATE_ZONE_W = 280                               // ширина зоны даты (по центру)
 
-const CLICK_SRC_TOP = 'icons/click_top.png'           // подсветка верхних колонок
-const CLICK_SRC_BOTTOM = 'icons/click_bottom.png'     // подсветка нижних колонок
-const CLICK_SRC_TIME_HHMM = 'icons/click_time_hhmm.png' // подсветка блока HH:MM
-const CLICK_SRC_TIME_SEC = 'icons/click_time_sec.png' // подсветка блока секунд
-const CLICK_SRC_DATE = 'icons/click_date.png'         // подсветка строки даты
+// Пары [нажатие, покой] PNG-подложек для каждой зоны
+const CLICK_IMG = {
+  top: ['icons/click_top.png', 'icons/click_top_n.png'],
+  steps: ['icons/click_steps.png', 'icons/click_steps_n.png'],
+  timeHhmm: ['icons/click_time_hhmm.png', 'icons/click_time_hhmm_n.png'],
+  timeSec: ['icons/click_time_sec.png', 'icons/click_time_sec_n.png'],
+  date: ['icons/click_date.png', 'icons/click_date_n.png'],
+  bottom: ['icons/click_bottom.png', 'icons/click_bottom_n.png']
+}
 
-function createClickZone(x, y, w, h, src, dataType) {
-  if (typeof hmUI === 'undefined' || !hmUI || !hmUI.widget || !hmUI.data_type) return
-  hmUI.createWidget(hmUI.widget.IMG_CLICK, {
+function createZoneButton(x, y, w, h, images, systemAppId) {
+  createWidget(widget.BUTTON, {
     x,
     y,
     w,
     h,
-    src,
-    type: dataType
+    normal_src: images[1],
+    press_src: images[0],
+    click_func: () => {
+      try {
+        launchApp({ appId: systemAppId, native: true })
+      } catch (e) {
+        console.log('zone launch error:', systemAppId, e)
+      }
+    }
   })
 }
 
 function createClickZones() {
-  // ВАЖНО: аргументы hmUI.data_type.* вычисляются на месте вызова, ДО входа
-  // в createClickZone(), поэтому проверять доступность legacy-глобала hmUI
-  // нужно именно здесь. В симуляторе Zepp OS 3.0 hmUI не определён, и без
-  // этой проверки падает: TypeError: cannot read property 'data_type' of undefined.
-  if (typeof hmUI === 'undefined' || !hmUI || !hmUI.widget || !hmUI.data_type) return
-
   const topTop = TOP_CY - TOP_R - 6
   const topBottom = TOP_LABEL_CY + 12
   const bottomTop = BOTTOM_RING_CY - BOTTOM_RING_R - 6
   const bottomBottom = BOTTOM_LABEL_BOX_Y + BOTTOM_LABEL_BOX_H
-  const dataType = hmUI.data_type
 
   // Верхний ряд: пульс / шаги (зона шире — включает счётчик шагов сверху) / калории
-  createClickZone(HR_CX - CLICK_ZONE_W / 2, topTop, CLICK_ZONE_W, topBottom - topTop, CLICK_SRC_TOP, dataType.HEART)
-  createClickZone(STEPS_CX - CLICK_ZONE_W / 2, 24, CLICK_ZONE_W, topBottom - 24, CLICK_SRC_TOP, dataType.STEP)
-  createClickZone(BAT_CX - CLICK_ZONE_W / 2, topTop, CLICK_ZONE_W, topBottom - topTop, CLICK_SRC_TOP, dataType.CAL)
+  createZoneButton(HR_CX - CLICK_ZONE_W / 2, topTop, CLICK_ZONE_W, topBottom - topTop, CLICK_IMG.top, SYSTEM_APP_HR)
+  createZoneButton(STEPS_CX - CLICK_ZONE_W / 2, 24, CLICK_ZONE_W, topBottom - 24, CLICK_IMG.steps, SYSTEM_APP_STATUS)
+  createZoneButton(BAT_CX - CLICK_ZONE_W / 2, topTop, CLICK_ZONE_W, topBottom - topTop, CLICK_IMG.top, SYSTEM_APP_STATUS)
 
   // Строка времени: HH:MM → будильник, «:SS» → секундомер
-  createClickZone(TIME_HHMM_X, TIME_ZONE_Y, TIME_HHMM_BOX_W, TIME_ZONE_H, CLICK_SRC_TIME_HHMM, dataType.ALARM_CLOCK)
-  createClickZone(TIME_COLON_X, TIME_ZONE_Y, TIME_SEC_ZONE_W, TIME_ZONE_H, CLICK_SRC_TIME_SEC, dataType.STOP_WATCH)
+  createZoneButton(TIME_HHMM_X, TIME_ZONE_Y, TIME_HHMM_BOX_W, TIME_ZONE_H, CLICK_IMG.timeHhmm, SYSTEM_APP_ALARM)
+  createZoneButton(TIME_COLON_X, TIME_ZONE_Y, TIME_SEC_ZONE_W, TIME_ZONE_H, CLICK_IMG.timeSec, SYSTEM_APP_STOPWATCH)
 
   // Строка даты → экран сна
-  createClickZone(CENTER_X - DATE_ZONE_W / 2, DATE_ZONE_Y, DATE_ZONE_W, DATE_ZONE_H, CLICK_SRC_DATE, dataType.SLEEP)
+  createZoneButton(CENTER_X - DATE_ZONE_W / 2, DATE_ZONE_Y, DATE_ZONE_W, DATE_ZONE_H, CLICK_IMG.date, SYSTEM_APP_SLEEP)
 
   // Нижний ряд: погода / батарея / кислород
-  createClickZone(WEATHER_CX - CLICK_ZONE_W / 2, bottomTop, CLICK_ZONE_W, bottomBottom - bottomTop, CLICK_SRC_BOTTOM, dataType.WEATHER_CURRENT)
-  createClickZone(BAT2_CX - CLICK_ZONE_W / 2, bottomTop, CLICK_ZONE_W, bottomBottom - bottomTop, CLICK_SRC_BOTTOM, dataType.BATTERY)
-  createClickZone(OXY_CX - CLICK_ZONE_W / 2, bottomTop, CLICK_ZONE_W, bottomBottom - bottomTop, CLICK_SRC_BOTTOM, dataType.SPO2)
+  createZoneButton(WEATHER_CX - CLICK_ZONE_W / 2, bottomTop, CLICK_ZONE_W, bottomBottom - bottomTop, CLICK_IMG.bottom, SYSTEM_APP_WEATHER)
+  createZoneButton(BAT2_CX - CLICK_ZONE_W / 2, bottomTop, CLICK_ZONE_W, bottomBottom - bottomTop, CLICK_IMG.bottom, SYSTEM_APP_SETTING)
+  createZoneButton(OXY_CX - CLICK_ZONE_W / 2, bottomTop, CLICK_ZONE_W, bottomBottom - bottomTop, CLICK_IMG.bottom, SYSTEM_APP_SPO2)
 }
 
 // ============================================================
