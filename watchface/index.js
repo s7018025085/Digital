@@ -30,9 +30,9 @@ const TOP_ICON_CY = TOP_CY + 1                        // Y-центр иконо
 const TOP_VALUE_CY = TOP_CY + TOP_R + 16              // Y-центр строки значений под верхними кольцами
 const TOP_LABEL_CY = TOP_VALUE_CY + 21                // Y-центр строки подписей (HR/STEPS/BATT)
 
-const HR_CX = 160                     // X-центр верхней колонки «Пульс»
+const HR_CX = 134                     // X-центр верхней колонки «Пульс» — выровнен с нижней колонкой «Погода» (WEATHER_CX)
 const STEPS_CX = 240                  // X-центр верхней колонки «Шаги» (центр экрана)
-const BAT_CX = 320                    // X-центр верхней колонки «Батарея»
+const BAT_CX = 346                    // X-центр верхней колонки «Калории» — выровнен с нижней колонкой «Кислород» (OXY_CX)
 
 // Основное время — собрано как одна центрированная строка: [HH:MM] [:] [S-десятки] [S-единицы]
 // HH:MM выровнено по правому краю внутри своего блока, поэтому не нужно
@@ -417,8 +417,10 @@ function drawCalorieIcon(cx, cy, color) {
 // Каждый индикатор: компактное кольцо -> внутри стек [иконка][значение], подпись снизу.
 
 function createTopWidgets() {
-  const halfW = TOP_R * 2
-  const labelW = 78
+  // Ширина текстовых боксов выровнена с нижним рядом (BOTTOM_BLOCK_W = 120),
+  // чтобы обе строки виджетов выглядели единообразно.
+  const halfW = 60
+  const labelW = 120
 
   // Шаги расположены над тремя циферблатами, как просили.
   createText({
@@ -437,9 +439,9 @@ function createTopWidgets() {
   drawTopSpriteIcon(HR_CX, TOP_ICON_CY, 'icons/heart-rate.png')
 
   hrValueWidget = createText({
-    x: HR_CX - TOP_R,
+    x: HR_CX - halfW,
     y: TOP_VALUE_CY - 13,
-    w: halfW,
+    w: halfW * 2,
     h: 26,
     text: '--',
     text_size: 22,
@@ -450,11 +452,11 @@ function createTopWidgets() {
 
   createText({
     x: HR_CX - labelW / 2,
-    y: TOP_LABEL_CY - 10,
+    y: TOP_LABEL_CY - 9,
     w: labelW,
-    h: 14,
+    h: 18,
     text: 'BPM',
-    text_size: 10,
+    text_size: 12,
     color: COLOR_GRAY,
     align_h: align.CENTER_H,
     align_v: align.CENTER_V
@@ -465,9 +467,9 @@ function createTopWidgets() {
   drawTopSpriteIcon(STEPS_CX, TOP_ICON_CY, 'icons/steps.png')
 
   distanceValueWidget = createText({
-    x: STEPS_CX - TOP_R,
+    x: STEPS_CX - halfW,
     y: TOP_VALUE_CY - 13,
-    w: halfW,
+    w: halfW * 2,
     h: 26,
     text: '0.00',
     text_size: 22,
@@ -478,24 +480,24 @@ function createTopWidgets() {
 
   createText({
     x: STEPS_CX - labelW / 2,
-    y: TOP_LABEL_CY - 10,
+    y: TOP_LABEL_CY - 9,
     w: labelW,
-    h: 14,
+    h: 18,
     text: 'KM',
-    text_size: 10,
+    text_size: 12,
     color: COLOR_GRAY,
     align_h: align.CENTER_H,
     align_v: align.CENTER_V
   })
 
-  // --- Кольцо батареи ---
+  // --- Кольцо калорий ---
   caloriesRing = createGradientRing(BAT_CX, TOP_CY, TOP_R, TOP_GLOW_R, TOP_LINE_W, batteryGradient)
   drawTopSpriteIcon(BAT_CX, TOP_ICON_CY, 'icons/calories.png')
 
   caloriesValueWidget = createText({
-    x: BAT_CX - TOP_R,
+    x: BAT_CX - halfW,
     y: TOP_VALUE_CY - 13,
-    w: halfW,
+    w: halfW * 2,
     h: 26,
     text: '0',
     text_size: 22,
@@ -506,11 +508,11 @@ function createTopWidgets() {
 
   createText({
     x: BAT_CX - labelW / 2,
-    y: TOP_LABEL_CY - 10,
+    y: TOP_LABEL_CY - 9,
     w: labelW,
-    h: 14,
+    h: 18,
     text: 'KCAL',
-    text_size: 10,
+    text_size: 12,
     color: COLOR_GRAY,
     align_h: align.CENTER_H,
     align_v: align.CENTER_V
@@ -933,6 +935,47 @@ function createBottomWidgets() {
 }
 
 // ============================================================
+// КЛИКАБЕЛЬНЫЕ ЗОНЫ
+// ============================================================
+// Прозрачные IMG_CLICK-зоны поверх колонок виджетов: по тапу система
+// сама открывает соответствующий экран (пульс, шаги, калории, погода,
+// батарея, кислород) — без необходимости знать appid системных приложений.
+// src — полностью прозрачный PNG, чтобы зона не изменяла внешний вид.
+// Legacy-глобал hmUI доступен в watchface наряду с @zos/ui (как и hmSensor).
+
+const CLICK_TRANSPARENT_SRC = 'icons/click.png' // прозрачная подложка нажатия
+const CLICK_ZONE_W = 120                        // ширина кликабельной зоны колонки (= BOTTOM_BLOCK_W)
+
+function createClickZone(cx, zoneTop, zoneBottom, dataType) {
+  if (typeof hmUI === 'undefined' || !hmUI.widget || !hmUI.data_type) return
+  hmUI.createWidget(hmUI.widget.IMG_CLICK, {
+    x: cx - CLICK_ZONE_W / 2,
+    y: zoneTop,
+    w: CLICK_ZONE_W,
+    h: zoneBottom - zoneTop,
+    src: CLICK_TRANSPARENT_SRC,
+    type: dataType
+  })
+}
+
+function createClickZones() {
+  const topBottom = TOP_LABEL_CY + 12
+  const topTop = TOP_CY - TOP_R - 6
+  const bottomTop = BOTTOM_RING_CY - BOTTOM_RING_R - 6
+  const bottomBottom = BOTTOM_LABEL_BOX_Y + BOTTOM_LABEL_BOX_H
+
+  // Верхний ряд: пульс / шаги (зона шире — включает счётчик шагов сверху) / калории
+  createClickZone(HR_CX, topTop, topBottom, hmUI.data_type.HEART)
+  createClickZone(STEPS_CX, 24, topBottom, hmUI.data_type.STEP)
+  createClickZone(BAT_CX, topTop, topBottom, hmUI.data_type.CAL)
+
+  // Нижний ряд: погода / батарея / кислород
+  createClickZone(WEATHER_CX, bottomTop, bottomBottom, hmUI.data_type.WEATHER_CURRENT)
+  createClickZone(BAT2_CX, bottomTop, bottomBottom, hmUI.data_type.BATTERY)
+  createClickZone(OXY_CX, bottomTop, bottomBottom, hmUI.data_type.SPO2)
+}
+
+// ============================================================
 // ОБНОВЛЕНИЕ: ВРЕМЯ / ДАТА
 // ============================================================
 
@@ -1169,6 +1212,8 @@ WatchFace({
     createDate()
     createBottomWidgets()
     createSectionDividers()
+    // Кликабельные зоны создаются последними, чтобы лежать поверх всех виджетов.
+    createClickZones()
 
     initSensors()
     startTimer()
