@@ -492,7 +492,7 @@ function createTopWidgets() {
   drawTopSpriteIcon(BAT_CX, TOP_ICON_CY, 'icons/calories.png')
 
   caloriesValueWidget = createText({
-твечай     x: BAT_CX - TOP_R,
+    x: BAT_CX - TOP_R,
     y: TOP_VALUE_CY - 13,
     w: halfW,
     h: 26,
