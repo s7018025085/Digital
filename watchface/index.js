@@ -1,5 +1,5 @@
 import { createWidget, widget, align, prop } from '@zos/ui'
-import { HeartRate, Step, Battery, SpO2 } from '@zos/sensor'
+import { HeartRate, Step, Battery, Pai } from '@zos/sensor'
 import { setInterval, clearInterval } from '@zos/timer'
 import {
   launchApp,
@@ -9,7 +9,7 @@ import {
   SYSTEM_APP_ALARM,
   SYSTEM_APP_STOPWATCH,
   SYSTEM_APP_SLEEP,
-  SYSTEM_APP_SPO2,
+  SYSTEM_APP_PAI,
   SYSTEM_APP_SETTING
 } from '@zos/router'
 
@@ -43,7 +43,7 @@ const TOP_LABEL_CY = TOP_VALUE_CY + 21                // Y-центр строк
 
 const HR_CX = 134                     // X-центр верхней колонки «Пульс» — выровнен с нижней колонкой «Погода» (WEATHER_CX)
 const STEPS_CX = 240                  // X-центр верхней колонки «Шаги» (центр экрана)
-const BAT_CX = 346                    // X-центр верхней колонки «Калории» — выровнен с нижней колонкой «Кислород» (OXY_CX)
+const BAT_CX = 346                    // X-центр верхней колонки «Калории» — выровнен с нижней колонкой «PAI» (PAI_CX)
 
 // Основное время — собрано как одна центрированная строка: [HH:MM] [:] [S-десятки] [S-единицы]
 // HH:MM выровнено по правому краю внутри своего блока, поэтому не нужно
@@ -107,17 +107,17 @@ const TOP_TIME_LINE_Y = 172           // Y разделителя №1: межд
 const TIME_DATE_LINE_Y = 255          // Y разделителя №2: между временем и датой
 const DATE_BOTTOM_LINE_Y = 290        // Y разделителя №3: между датой и нижними виджетами
 
-// Нижние информационные блоки (Погода / Батарея / Кислород). Все три колонки
+// Нижние информационные блоки (Погода / Батарея / PAI). Все три колонки
 // выровнены по высоте в один ряд: иконка и кольца центрированы на BOTTOM_RING_CY,
 // значения — в BOTTOM_VALUE_BOX, подписи — в BOTTOM_LABEL_BOX.
 const BOTTOM_RING_CY = 348            // Y-центр нижних колец и иконки погоды (весь ряд двигается им)
-const BOTTOM_RING_R = 34              // радиус нижних колец (батарея, SpO2)
+const BOTTOM_RING_R = 34              // радиус нижних колец (батарея, PAI)
 const BOTTOM_RING_GLOW_R = 34 + 3     // радиус зоны свечения нижних колец (R + свечение)
 const BOTTOM_RING_LINE_W = 5          // толщина линии нижних колец
 const BOTTOM_ICON_SIZE = 60           // размер квадратной иконки погоды, px
 const BOTTOM_VALUE_BOX_Y = 390        // Y верхней границы строки значений (--° / -- / --)
 const BOTTOM_VALUE_BOX_H = 26         // высота бокса строки значений
-const BOTTOM_LABEL_BOX_Y = 420        // Y верхней границы строки подписей (WEATHER/BATTERY/OXYGEN)
+const BOTTOM_LABEL_BOX_Y = 420        // Y верхней границы строки подписей (WEATHER/BATTERY/PAI)
 const BOTTOM_LABEL_BOX_H = 18         // высота бокса строки подписей
 const BOTTOM_BLOCK_W = 120            // ширина бокса текста одной нижней колонки (для центрирования)
 const BOTTOM_VALUE_FONT = 24          // размер шрифта значений нижних виджетов
@@ -125,7 +125,7 @@ const BOTTOM_LABEL_FONT = 14          // размер шрифта подпис�
 
 const WEATHER_CX = 134                // X-центр нижней колонки «Погода» (слева)
 const BAT2_CX = 240                   // X-центр нижней колонки «Батарея» (центр экрана)
-const OXY_CX = 346                    // X-центр нижней колонки «Кислород SpO2» (справа)
+const PAI_CX = 346                    // X-центр нижней колонки «PAI» (справа)
 
 // Метки на корпусе
 const TICK_R = 222
@@ -183,8 +183,8 @@ let caloriesRing = null
 let bottomBatteryValueWidget = null
 let bottomBatteryRing = null
 
-let bottomOxygenValueWidget = null
-let bottomOxygenRing = null
+let bottomPaiValueWidget = null
+let bottomPaiRing = null
 
 let weatherSensor = null
 let weatherValueWidget = null
@@ -196,12 +196,11 @@ let mainTimer = null
 let heartRateSensor = null
 let stepSensor = null
 let batterySensor = null
-let spo2Sensor = null
+let paiSensor = null
 
 let onHrChange = null
 let onStepChange = null
 let onBatteryChange = null
-let onSpo2Change = null
 
 const WEEKDAYS = [
   'ВОСКРЕСЕНЬЕ',
@@ -273,7 +272,7 @@ function batteryGradient(t) {
   return triColor(t, COLOR_RED, COLOR_YELLOW, COLOR_GREEN)
 }
 
-function oxygenGradient(t) {
+function paiGradient(t) {
   return lerpColor(COLOR_PURPLE, COLOR_CYAN, clamp(t, 0, 1))
 }
 
@@ -903,25 +902,25 @@ function createBottomWidgets() {
     align_v: align.CENTER_V
   })
 
-  // --- Кислород SpO2 (справа): кольцо в стиле верхних виджетов ---
-  bottomOxygenRing = createGradientRing(
-    OXY_CX, BOTTOM_RING_CY, BOTTOM_RING_R, BOTTOM_RING_GLOW_R,
-    BOTTOM_RING_LINE_W, oxygenGradient
+  // --- PAI (справа): кольцо в стиле верхних виджетов ---
+  bottomPaiRing = createGradientRing(
+    PAI_CX, BOTTOM_RING_CY, BOTTOM_RING_R, BOTTOM_RING_GLOW_R,
+    BOTTOM_RING_LINE_W, paiGradient
   )
   createText({
-    x: OXY_CX - 40,
+    x: PAI_CX - 40,
     y: BOTTOM_RING_CY - 11,
     w: 80,
     h: 22,
-    text: 'SpO2',
+    text: 'PAI',
     text_size: 16,
     color: COLOR_PURPLE,
     align_h: align.CENTER_H,
     align_v: align.CENTER_V
   })
 
-  bottomOxygenValueWidget = createText({
-    x: OXY_CX - halfW,
+  bottomPaiValueWidget = createText({
+    x: PAI_CX - halfW,
     y: BOTTOM_VALUE_BOX_Y,
     w: BOTTOM_BLOCK_W,
     h: BOTTOM_VALUE_BOX_H,
@@ -933,11 +932,11 @@ function createBottomWidgets() {
   })
 
   createText({
-    x: OXY_CX - halfW,
+    x: PAI_CX - halfW,
     y: BOTTOM_LABEL_BOX_Y,
     w: BOTTOM_BLOCK_W,
     h: BOTTOM_LABEL_BOX_H,
-    text: 'OXYGEN',
+    text: 'PAI',
     text_size: BOTTOM_LABEL_FONT,
     color: COLOR_GRAY,
     align_h: align.CENTER_H,
@@ -1014,10 +1013,10 @@ function createClickZones() {
   // Строка даты → экран сна
   createZoneButton(CENTER_X - DATE_ZONE_W / 2, DATE_ZONE_Y, DATE_ZONE_W, DATE_ZONE_H, CLICK_IMG.date, SYSTEM_APP_SLEEP)
 
-  // Нижний ряд: погода / батарея / кислород
+  // Нижний ряд: погода / батарея / PAI
   createZoneButton(WEATHER_CX - CLICK_ZONE_W / 2, bottomTop, CLICK_ZONE_W, bottomBottom - bottomTop, CLICK_IMG.bottom, SYSTEM_APP_WEATHER)
   createZoneButton(BAT2_CX - CLICK_ZONE_W / 2, bottomTop, CLICK_ZONE_W, bottomBottom - bottomTop, CLICK_IMG.bottom, SYSTEM_APP_SETTING)
-  createZoneButton(OXY_CX - CLICK_ZONE_W / 2, bottomTop, CLICK_ZONE_W, bottomBottom - bottomTop, CLICK_IMG.bottom, SYSTEM_APP_SPO2)
+  createZoneButton(PAI_CX - CLICK_ZONE_W / 2, bottomTop, CLICK_ZONE_W, bottomBottom - bottomTop, CLICK_IMG.bottom, SYSTEM_APP_PAI)
 }
 
 // ============================================================
@@ -1102,33 +1101,29 @@ function updateBattery(pct) {
 }
 
 // ============================================================
-// ОБНОВЛЕНИЕ: КИСЛОРОД SpO2 (нижний виджет)
+// ОБНОВЛЕНИЕ: PAI (нижний виджет)
 // ============================================================
 
-// Значение SpO2 приходит по-разному в зависимости от API/версии прошивки:
-// число, объект { value, time } или sensor.current — нормализуем все варианты.
-function readSpo2Value(sensor) {
+// У Pai из @zos/sensor нет событий изменения — значение читаем принудительно
+// (в initSensors и в общем таймере, как погоду). Показываем PAI, набранный
+// сегодня; если сенсор недоступен — возвращаем 0, на экране будет '--'.
+function readPaiValue(sensor) {
   if (!sensor) return 0
   try {
-    let v
-    if (typeof sensor.getCurrent === 'function') {
-      v = sensor.getCurrent()
-    } else if (sensor.current !== undefined) {
-      v = sensor.current
-    }
-    if (v && typeof v === 'object') return v.value || 0
-    return v || 0
+    if (typeof sensor.getToday === 'function') return sensor.getToday() || 0
+    if (typeof sensor.getTotal === 'function') return sensor.getTotal() || 0
+    return 0
   } catch (e) {
     return 0
   }
 }
 
-function updateOxygen(raw) {
-  const value = raw && raw > 0 && raw <= 100 ? Math.round(raw) : 0
-  bottomOxygenValueWidget.setProperty(prop.TEXT, value > 0 ? value + '%' : '--')
-  // Норма 95-100%: кольцо полностью загорается при 100%, начинает
-  // реагировать от 80% и ниже, чтобы просадка была заметна визуально.
-  updateGradientRing(bottomOxygenRing, clamp((value - 80) / 20, 0, 1))
+function updatePai(raw) {
+  const value = raw && raw > 0 ? Math.round(raw) : 0
+  bottomPaiValueWidget.setProperty(prop.TEXT, value > 0 ? String(value) : '--')
+  // Ориентир — 100 PAI (рекомендованная недельная норма WHO/Zepp):
+  // кольцо полностью загорается при 100 PAI.
+  updateGradientRing(bottomPaiRing, clamp(value / 100, 0, 1))
 }
 
 function updateWeatherFromSensor() {
@@ -1155,11 +1150,8 @@ function initSensors() {
   stepSensor = new Step()
   batterySensor = new Battery()
 
-  try { spo2Sensor = new SpO2(); } catch(e) { spo2Sensor = null; }
-  if (!spo2Sensor) {
-    // Фолбэк на легаси-API hmSensor для старых прошивок.
-    try { spo2Sensor = hmSensor.createSensor(hmSensor.id.SENSOR_SPO2); } catch(e) { spo2Sensor = null; }
-  }
+  // Pai доступен только в новом API (@zos/sensor), легаси-фолбэка hmSensor нет.
+  try { paiSensor = new Pai(); } catch(e) { paiSensor = null; }
 
   try { weatherSensor = hmSensor.createSensor(hmSensor.id.WEATHER); } catch(e) { weatherSensor = null; }
 
@@ -1174,7 +1166,7 @@ function initSensors() {
 
   updateBattery(batterySensor.getCurrent ? batterySensor.getCurrent() : 0)
 
-  updateOxygen(readSpo2Value(spo2Sensor))
+  updatePai(readPaiValue(paiSensor))
 
   updateWeatherFromSensor()
 
@@ -1187,9 +1179,6 @@ function initSensors() {
   onBatteryChange = () => {
     updateBattery(batterySensor.getCurrent())
   }
-  onSpo2Change = () => {
-    updateOxygen(readSpo2Value(spo2Sensor))
-  }
 
   if (heartRateSensor.onCurrentChange) {
     heartRateSensor.onCurrentChange(onHrChange)
@@ -1199,9 +1188,6 @@ function initSensors() {
   }
   if (batterySensor.onChange) {
     batterySensor.onChange(onBatteryChange)
-  }
-  if (spo2Sensor && spo2Sensor.onCurrentChange) {
-    try { spo2Sensor.onCurrentChange(onSpo2Change); } catch(e) {}
   }
 }
 
@@ -1215,9 +1201,6 @@ function teardownSensors() {
   if (batterySensor && onBatteryChange && batterySensor.offChange) {
     batterySensor.offChange(onBatteryChange)
   }
-  if (spo2Sensor && onSpo2Change && spo2Sensor.offCurrentChange) {
-    try { spo2Sensor.offCurrentChange(onSpo2Change); } catch(e) {}
-  }
 }
 
 // ============================================================
@@ -1229,6 +1212,7 @@ function startTimer() {
   mainTimer = setInterval(() => {
     updateTime()
     updateWeatherFromSensor()
+    updatePai(readPaiValue(paiSensor))
   }, 500)
 }
 

@@ -20,7 +20,7 @@ const ZONES = [
   ['click_time_hhmm', 260, 78],   // блок HH:MM → будильник
   ['click_time_sec', 136, 78],    // блок секунд → секундомер
   ['click_date', 280, 34],        // строка даты → сон
-  ['click_bottom', 120, 130]      // нижние колонки: погода / батарея / SpO2
+  ['click_bottom', 120, 130]      // нижние колонки: погода / батарея / PAI
 ]
 
 function writePng(w, h, file, alphaFn) {
