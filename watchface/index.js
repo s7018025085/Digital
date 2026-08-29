@@ -1,5 +1,5 @@
 import { createWidget, widget, align, prop } from '@zos/ui'
-import { HeartRate, Step, Battery, Pai } from '@zos/sensor'
+import { HeartRate, Step, Battery, Pai, Weather } from '@zos/sensor'
 import { setInterval, clearInterval } from '@zos/timer'
 import {
   launchApp,
@@ -187,6 +187,7 @@ let bottomPaiValueWidget = null
 let bottomPaiRing = null
 
 let weatherSensor = null
+let weatherNewSensor = null
 let weatherValueWidget = null
 let weatherIconWidget = null
 let weatherCode = -1
@@ -830,7 +831,9 @@ function updateWeatherIcon(index) {
   const idx = clamp(index, 0, 28)
   if (weatherIconWidget && idx !== weatherCode) {
     weatherCode = idx
-    weatherIconWidget.setProperty(prop.SRC, WEATHER_ICON_BASE + (idx + 1) + '.png')
+    // Файлы иконок названы с ведущим нулём: Weather_01.png … Weather_29.png,
+    // поэтому номер файла формируется через twoDigits (Weather_1.png не существует).
+    weatherIconWidget.setProperty(prop.SRC, WEATHER_ICON_BASE + twoDigits(idx + 1) + '.png')
   }
 }
 
@@ -1105,39 +1108,80 @@ function updateBattery(pct) {
 // ============================================================
 
 // У Pai из @zos/sensor нет событий изменения — значение читаем принудительно
-// (в initSensors и в общем таймере, как погоду). Показываем PAI, набранный
-// сегодня; если сенсор недоступен — возвращаем 0, на экране будет '--'.
+// (в initSensors и в общем таймере, как погоду). Возвращает число — причём 0
+// является валидным значением («активности сегодня ещё нет») — или null,
+// если сенсор недоступен/не вернул число.
 function readPaiValue(sensor) {
-  if (!sensor) return 0
+  if (!sensor) return null
   try {
-    if (typeof sensor.getToday === 'function') return sensor.getToday() || 0
-    if (typeof sensor.getTotal === 'function') return sensor.getTotal() || 0
-    return 0
+    let v = null
+    if (typeof sensor.getToday === 'function') v = sensor.getToday()
+    else if (typeof sensor.getTotal === 'function') v = sensor.getTotal()
+    return typeof v === 'number' && isFinite(v) ? v : null
   } catch (e) {
-    return 0
+    console.log('[Digital] pai read error:', e)
+    return null
   }
 }
 
+let lastPaiLogged = null
+
 function updatePai(raw) {
-  const value = raw && raw > 0 ? Math.round(raw) : 0
-  bottomPaiValueWidget.setProperty(prop.TEXT, value > 0 ? String(value) : '--')
+  const value = typeof raw === 'number' && isFinite(raw) ? Math.max(0, Math.round(raw)) : null
+  bottomPaiValueWidget.setProperty(prop.TEXT, value !== null ? String(value) : '--')
   // Ориентир — 100 PAI (рекомендованная недельная норма WHO/Zepp):
   // кольцо полностью загорается при 100 PAI.
-  updateGradientRing(bottomPaiRing, clamp(value / 100, 0, 1))
+  updateGradientRing(bottomPaiRing, clamp((value || 0) / 100, 0, 1))
+  // Диагностика в консоль dev-сервера: только при изменении значения.
+  if (value !== lastPaiLogged) {
+    lastPaiLogged = value
+    console.log('[Digital] pai:', raw, '->', value !== null ? value : "'--'")
+  }
 }
 
+let lastWeatherTemp = null
+
 function updateWeatherFromSensor() {
-  if (!weatherSensor) return
   try {
-    const curTemp = weatherSensor.current
-    if (curTemp !== undefined && curTemp !== null) {
-      weatherValueWidget.setProperty(prop.TEXT, Math.round(curTemp) + '°')
-    }
-    const curIdx = weatherSensor.curAirIconIndex
-    if (curIdx !== undefined && curIdx !== null && curIdx >= 0 && curIdx <= 28) {
-      updateWeatherIcon(Number(curIdx))
+    if (weatherSensor) {
+      // Основной путь (устройство): легаси-сенсор с текущей температурой.
+      const curTemp = weatherSensor.current
+      if (curTemp !== undefined && curTemp !== null) {
+        weatherValueWidget.setProperty(prop.TEXT, Math.round(curTemp) + '°')
+        // Диагностика в консоль dev-сервера: только при изменении температуры.
+        if (curTemp !== lastWeatherTemp) {
+          lastWeatherTemp = curTemp
+          console.log('[Digital] weather: temp=', curTemp, 'airIconIndex=', weatherSensor.curAirIconIndex)
+        }
+      }
+      const curIdx = weatherSensor.curAirIconIndex
+      if (curIdx !== undefined && curIdx !== null && curIdx >= 0 && curIdx <= 28) {
+        updateWeatherIcon(Number(curIdx))
+      }
+    } else if (weatherNewSensor) {
+      // Фолбэк (симулятор): прогноз нового API, данные за сегодня — data[0].
+      const read = typeof weatherNewSensor.getForecastWeather === 'function'
+        ? weatherNewSensor.getForecastWeather()
+        : (typeof weatherNewSensor.getForecast === 'function' ? weatherNewSensor.getForecast() : null)
+      const today = read && read.forecastData && read.forecastData.data && read.forecastData.data[0]
+      // В симуляторе без данных о городе Weather возвращает нулевую заглушку
+      // (high=0, low=0, index=0) — считаем это отсутствием данных и оставляем
+      // '--°', чтобы не показывать ложные «0°». На устройстве работает легаси-
+      // сенсор, эта ветка до него не доходит.
+      const hasData = today && (today.high !== 0 || today.low !== 0 || today.index !== 0)
+      if (hasData && typeof today.high === 'number' && isFinite(today.high)) {
+        weatherValueWidget.setProperty(prop.TEXT, Math.round(today.high) + '°')
+        if (today.high !== lastWeatherTemp) {
+          lastWeatherTemp = today.high
+          console.log('[Digital] weather(new): high=', today.high, 'low=', today.low, 'index=', today.index)
+        }
+      }
+      if (hasData && typeof today.index === 'number' && today.index >= 0 && today.index <= 28) {
+        updateWeatherIcon(today.index)
+      }
     }
   } catch (e) {
+    console.log('[Digital] weather read error:', e)
   }
 }
 
@@ -1153,7 +1197,16 @@ function initSensors() {
   // Pai доступен только в новом API (@zos/sensor), легаси-фолбэка hmSensor нет.
   try { paiSensor = new Pai(); } catch(e) { paiSensor = null; }
 
+  // Погода: легаси hmSensor.WEATHER официально не затронут deprecation'ом для
+  // циферблатов и работает на устройстве, но в симуляторе недоступен — поэтому
+  // как фолбэк пробуем также новый API Weather(@zos/sensor).
   try { weatherSensor = hmSensor.createSensor(hmSensor.id.WEATHER); } catch(e) { weatherSensor = null; }
+  if (!weatherSensor) {
+    try { weatherNewSensor = new Weather(); } catch(e) { weatherNewSensor = null; }
+  }
+
+  console.log('[Digital] sensors:', paiSensor ? 'pai ok' : 'pai unavailable', '|',
+    weatherSensor ? 'weather legacy ok' : (weatherNewSensor ? 'weather new-api' : 'weather unavailable'))
 
   updateHeartRate(heartRateSensor.getCurrent ? heartRateSensor.getCurrent() : 0)
 
@@ -1169,6 +1222,10 @@ function initSensors() {
   updatePai(readPaiValue(paiSensor))
 
   updateWeatherFromSensor()
+
+  console.log('[Digital] init values: pai=', readPaiValue(paiSensor),
+    '| weather.current=', weatherSensor ? weatherSensor.current : (weatherNewSensor ? 'new-api' : 'no sensor'),
+    '| weather.curAirIconIndex=', weatherSensor ? weatherSensor.curAirIconIndex : (weatherNewSensor ? 'new-api' : 'no sensor'))
 
   onHrChange = () => {
     updateHeartRate(heartRateSensor.getCurrent())
