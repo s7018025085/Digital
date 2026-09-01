@@ -166,6 +166,12 @@ const FONT_REGULAR = 'fonts/rostex.regular.ttf'
 // show_level.ONLY_NORMAL и скрыто системой в AOD-сцене.
 const COLOR_AOD_BG = 0x000000               // чёрный фон AOD (ничего не светится)
 const COLOR_AOD_TIME = 0x8d959d             // приглушённый серо-белый цвет времени на AOD
+const AOD_TIME_DIGITS = [
+  'fonts/aod/0.png', 'fonts/aod/1.png', 'fonts/aod/2.png', 'fonts/aod/3.png',
+  'fonts/aod/4.png', 'fonts/aod/5.png', 'fonts/aod/6.png', 'fonts/aod/7.png',
+  'fonts/aod/8.png', 'fonts/aod/9.png'
+]
+const AOD_TIME_COLON = 'fonts/aod/colon.png'
 const SHOW_NORMAL = ui.show_level.ONLY_NORMAL  // виден только на активном экране
 const SHOW_AOD = ui.show_level.ONAL_AOD        // виден только в AOD-сцене (rest screen)
 const SHOW_NORMAL_AOD = SHOW_NORMAL | SHOW_AOD  // виден и там, и там
@@ -180,8 +186,7 @@ const RING_SEGMENT_GAP = 4
 
 let timeDigitCells = []
 let timeColonCells = []
-let aodTimeDigitCells = []
-let aodTimeColonCells = []
+let aodTimeWidget = null
 let topStepsWidget = null
 
 // AOD-вариант времени: отдельный приглушённый виджет HH:MM, который система
@@ -730,40 +735,23 @@ function createMainTime() {
     })
   ]
 
-  aodTimeDigitCells = [
-    [TIME_HH_TENS_X, hh[0]],
-    [TIME_HH_UNITS_X, hh[1]],
-    [TIME_MM_TENS_X, mm[0]],
-    [TIME_MM_UNITS_X, mm[1]]
-  ].map(([x, text]) => createFixedTextCell({
-    x,
-    y: boxY,
-    w: TIME_HHMM_DIGIT_W,
-    h: TIME_ROW_H,
-    text,
-    text_size: TIME_FONT_SIZE,
-    font: FONT_REGULAR,
-    color: COLOR_AOD_TIME,
-    shadow: false,
-    show_level: SHOW_AOD,
-    align_h: align.CENTER_H,
-    align_v: align.CENTER_V
-  }))
-
-  aodTimeColonCells = [TIME_HHMM_COLON_X, TIME_COLON_X].map(x => createFixedTextCell({
-    x,
-    y: boxY,
-    w: TIME_COLON_W,
-    h: TIME_ROW_H,
-    text: ':',
-    text_size: TIME_FONT_SIZE,
-    font: FONT_REGULAR,
-    color: COLOR_AOD_TIME,
-    shadow: false,
-    show_level: SHOW_AOD,
-    align_h: align.CENTER_H,
-    align_v: align.CENTER_V
-  }))
+  // IMG_TIME is updated by firmware while the screen is off, so AOD does
+  // not depend on a JavaScript timer that may be suspended in screen-off mode.
+  aodTimeWidget = createWidget(widget.IMG_TIME, {
+    hour_zero: 1,
+    hour_startX: TIME_HH_TENS_X,
+    hour_startY: boxY,
+    hour_array: AOD_TIME_DIGITS,
+    hour_space: 0,
+    hour_unit_sc: AOD_TIME_COLON,
+    hour_unit_tc: AOD_TIME_COLON,
+    hour_unit_en: AOD_TIME_COLON,
+    hour_align: align.LEFT,
+    minute_follow: 1,
+    minute_array: AOD_TIME_DIGITS,
+    minute_space: 0,
+    show_level: SHOW_AOD
+  })
 
   const ss = now.getSeconds()
   secTensSlot = createRollingDigit(TIME_SEC_TENS_X, boxY, TIME_SEC_DIGIT_W, TIME_ROW_H, Math.floor(ss / 10))
@@ -1197,13 +1185,6 @@ function updateTime() {
       timeColonCells[i].glowWidgets[j].setProperty(prop.TEXT, ':')
     }
   }
-  for (let i = 0; i < aodTimeDigitCells.length; i++) {
-    aodTimeDigitCells[i].main.setProperty(prop.TEXT, timeDigits[i])
-  }
-  for (let i = 0; i < aodTimeColonCells.length; i++) {
-    aodTimeColonCells[i].main.setProperty(prop.TEXT, ':')
-  }
-
   // Секунды (и их ролл-анимация) на AOD не нужны — там виден только HH:MM,
   // значит не тратим вычислительные ресурсы на скрытые маски.
   if (!IS_AOD) {
