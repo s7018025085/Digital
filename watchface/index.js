@@ -1178,7 +1178,6 @@ function createClickZones() {
 // ============================================================
 
 let lastRenderedDay = -1
-let lastRenderedTime = null
 
 function updateTime() {
   const now = new Date()
@@ -1204,7 +1203,6 @@ function updateTime() {
   for (let i = 0; i < aodTimeColonCells.length; i++) {
     aodTimeColonCells[i].main.setProperty(prop.TEXT, ':')
   }
-  lastRenderedTime = hh + ':' + mm
 
   // Секунды (и их ролл-анимация) на AOD не нужны — там виден только HH:MM,
   // значит не тратим вычислительные ресурсы на скрытые маски.
@@ -1480,13 +1478,15 @@ WatchFace({
 
     initSensors()
     startTimer()
-  },
 
-  // После пробуждения таймер может продолжить работу с отложенным тиком.
-  // Принудительно обновляем время сразу, чтобы не показывать старый кадр.
-  onResume() {
-    lastRenderedDay = -1
-    updateTime()
+    // Watchface runtime pauses timers while the screen is asleep. Delegate
+    // resumes first and gives us a reliable point to refresh the visible time.
+    createWidget(widget.WIDGET_DELEGATE, {
+      resume_call() {
+        lastRenderedDay = -1
+        updateTime()
+      }
+    })
   },
 
   onDestroy() {
