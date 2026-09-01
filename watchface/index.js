@@ -1,4 +1,4 @@
-import { createWidget, widget, align, prop } from '@zos/ui'
+import ui, { createWidget, widget, align, prop } from '@zos/ui'
 import { HeartRate, Step, Battery, Pai, Weather } from '@zos/sensor'
 import { setInterval, clearInterval } from '@zos/timer'
 import {
@@ -12,6 +12,7 @@ import {
   SYSTEM_APP_PAI,
   SYSTEM_APP_SETTING
 } from '@zos/router'
+import { getScene, SCENE_AOD } from '@zos/app'
 
 // ============================================================
 // МАКЕТ
@@ -155,6 +156,20 @@ const COLOR_DIVIDER = 0x4a5058
 const FONT_LABEL = 'fonts/Onest-VariableFont_wght.ttf'
 const FONT_REGULAR = 'fonts/rostex.regular.ttf'
 
+// ============================================================
+// AOD (Always-On Display)
+// ============================================================
+// «Затухший» экран (сцена AOD) показывается, когда рука опущена.
+// Чтобы не выжигать AMOLED и не тратить батарею, на нём отображаются
+// только приглушённые время и дата: чёрный фон, серое HH:MM без свечения
+// и тени. Всё остальное (кольца, статистика, секунды, кнопки) помечено
+// show_level.ONLY_NORMAL и скрыто системой в AOD-сцене.
+const COLOR_AOD_BG = 0x000000               // чёрный фон AOD (ничего не светится)
+const COLOR_AOD_TIME = 0x8d959d             // приглушённый серо-белый цвет времени на AOD
+const SHOW_NORMAL = ui.show_level.ONLY_NORMAL  // виден только на активном экране
+const SHOW_AOD = ui.show_level.ONAL_AOD        // виден только в AOD-сцене (rest screen)
+const SHOW_NORMAL_AOD = SHOW_NORMAL | SHOW_AOD  // виден и там, и там
+
 const RING_SEGMENTS = 8
 const RING_SEGMENT_ANGLE = 360 / RING_SEGMENTS
 const RING_SEGMENT_GAP = 4
@@ -165,7 +180,15 @@ const RING_SEGMENT_GAP = 4
 
 let timeDigitCells = []
 let timeColonCells = []
+let aodTimeDigitCells = []
+let aodTimeColonCells = []
 let topStepsWidget = null
+
+// AOD-вариант времени: отдельный приглушённый виджет HH:MM, который система
+// показывает только на затухшем экране (show_level.ONAL_AOD).
+// Устанавливается в build() через getScene(): true, если страница запущена
+// в AOD-сцене. Используется, чтобы не запускать в AOD секунды/сенсорные опросы.
+let IS_AOD = false
 
 let secTensSlot = null
 let secUnitsSlot = null
@@ -224,8 +247,23 @@ function clamp(value, min, max) {
   return value
 }
 
+// Все виджеты создаются через эту обёртку, чтобы по умолчанию получать
+// show_level.ONLY_NORMAL (видны только на активном экране). Без этого Zepp OS
+// показывает все виджеты и в AOD-сцене — яркие кольца, секунды и кнопки будут
+// жечь AMOLED и сажать батарею. Элементы, которые должны светиться в AOD,
+// передают show_level явно: SHOW_AOD (только AOD) или SHOW_NORMAL_AOD (обе сцены).
+function createWfWidget(type, options) {
+  if (options.show_level === undefined) {
+    options.show_level = SHOW_NORMAL
+  }
+  return createWidget(type, options)
+}
+
 function createText(options) {
   options.font = options.font || FONT_LABEL
+  if (options.show_level === undefined) {
+    options.show_level = SHOW_NORMAL
+  }
   return createWidget(widget.TEXT, options)
 }
 
@@ -249,12 +287,13 @@ function createFixedTextCell(options) {
         font: options.font,
         color: options.glowColor,
         align_h: options.align_h,
-        align_v: options.align_v
+        align_v: options.align_v,
+        show_level: options.show_level
       }))
     }
   }
 
-  cell.shadow = createText({
+  if (options.shadow !== false) cell.shadow = createText({
     x: options.x + TIME_SHADOW_OFFSET,
     y: options.y + TIME_SHADOW_OFFSET,
     w: options.w,
@@ -264,7 +303,8 @@ function createFixedTextCell(options) {
     font: options.font,
     color: COLOR_SHADOW,
     align_h: options.align_h,
-    align_v: options.align_v
+    align_v: options.align_v,
+    show_level: options.show_level
   })
 
   cell.main = createText({
@@ -277,7 +317,8 @@ function createFixedTextCell(options) {
     font: options.font,
     color: options.color,
     align_h: options.align_h,
-    align_v: options.align_v
+    align_v: options.align_v,
+    show_level: options.show_level
   })
 
   return cell
@@ -337,14 +378,26 @@ function paiGradient(t) {
 // ============================================================
 
 function createBackground() {
-  createWidget(widget.FILL_RECT, {
+  // Обычный (тёмно-синий) фон — только на активном экране.
+  createWfWidget(widget.FILL_RECT, {
     x: 0,
     y: 0,
     w: SCREEN_W,
     h: SCREEN_H,
-    color: COLOR_BG
+    color: COLOR_BG,
+    show_level: SHOW_NORMAL
   })
 
+  // Чёрный фон для AOD: система покажет его только на затухшем экране,
+  // чтобы AMOLED не светил цветным полем и не выжигал пиксели.
+  createWfWidget(widget.FILL_RECT, {
+    x: 0,
+    y: 0,
+    w: SCREEN_W,
+    h: SCREEN_H,
+    color: COLOR_AOD_BG,
+    show_level: SHOW_AOD
+  })
 }
 
 // ============================================================
@@ -360,7 +413,7 @@ function createGradientRing(cx, cy, r, glowR, lineWidth, gradientFn) {
   const startAngle = -90
 
   // Мягкое внешнее свечение — один тусклый, чуть больший круг за всем.
-  createWidget(widget.ARC, {
+  createWfWidget(widget.ARC, {
     x: cx - glowR,
     y: cy - glowR,
     w: glowR * 2,
@@ -372,7 +425,7 @@ function createGradientRing(cx, cy, r, glowR, lineWidth, gradientFn) {
   })
 
   // Фоновая дорожка.
-  createWidget(widget.ARC, {
+  createWfWidget(widget.ARC, {
     x: cx - r,
     y: cy - r,
     w: r * 2,
@@ -390,7 +443,7 @@ function createGradientRing(cx, cy, r, glowR, lineWidth, gradientFn) {
     const t = i / (RING_SEGMENTS - 1)
     const color = gradientFn(t)
 
-    const seg = createWidget(widget.ARC, {
+    const seg = createWfWidget(widget.ARC, {
       x: cx - r,
       y: cy - r,
       w: r * 2,
@@ -423,7 +476,7 @@ function updateGradientRing(ring, ratio) {
 const TOP_SPRITE_ICON_SIZE = 40
 
 function drawTopSpriteIcon(cx, cy, src) {
-  createWidget(widget.IMG, {
+  createWfWidget(widget.IMG, {
     x: cx - TOP_SPRITE_ICON_SIZE / 2,
     y: cy - TOP_SPRITE_ICON_SIZE / 2,
     w: TOP_SPRITE_ICON_SIZE,
@@ -445,7 +498,7 @@ function drawPulseIcon(cx, cy, color) {
 
 // Глиф идущего человечка для шагов: голова + туловище + ноги + руки.
 function drawStepsIcon(cx, cy, color) {
-  createWidget(widget.CIRCLE, {
+  createWfWidget(widget.CIRCLE, {
     center_x: cx + 2,
     center_y: cy - 8,
     radius: 3,
@@ -455,21 +508,21 @@ function drawStepsIcon(cx, cy, color) {
 
 // Глиф батарейки: контур корпуса + клемма-выступ.
 function drawBatteryIcon(cx, cy, color) {
-  createWidget(widget.STROKE_RECT, {
+  createWfWidget(widget.STROKE_RECT, {
     x: cx - 12, y: cy - 6, w: 22, h: 12,
     color, line_width: 2
   })
-  createWidget(widget.FILL_RECT, {
+  createWfWidget(widget.FILL_RECT, {
     x: cx + 11, y: cy - 3, w: 3, h: 6, color
   })
-  createWidget(widget.FILL_RECT, {
+  createWfWidget(widget.FILL_RECT, {
     x: cx - 9, y: cy - 3, w: 6, h: 6, color
   })
 }
 
 // Глиф пламени для калорий: простая залитая фигурка с острым язычком огня.
 function drawCalorieIcon(cx, cy, color) {
-  createWidget(widget.CIRCLE, {
+  createWfWidget(widget.CIRCLE, {
     center_x: cx,
     center_y: cy + 3,
     radius: 6,
@@ -677,6 +730,41 @@ function createMainTime() {
     })
   ]
 
+  aodTimeDigitCells = [
+    [TIME_HH_TENS_X, hh[0]],
+    [TIME_HH_UNITS_X, hh[1]],
+    [TIME_MM_TENS_X, mm[0]],
+    [TIME_MM_UNITS_X, mm[1]]
+  ].map(([x, text]) => createFixedTextCell({
+    x,
+    y: boxY,
+    w: TIME_HHMM_DIGIT_W,
+    h: TIME_ROW_H,
+    text,
+    text_size: TIME_FONT_SIZE,
+    font: FONT_REGULAR,
+    color: COLOR_AOD_TIME,
+    shadow: false,
+    show_level: SHOW_AOD,
+    align_h: align.CENTER_H,
+    align_v: align.CENTER_V
+  }))
+
+  aodTimeColonCells = [TIME_HHMM_COLON_X, TIME_COLON_X].map(x => createFixedTextCell({
+    x,
+    y: boxY,
+    w: TIME_COLON_W,
+    h: TIME_ROW_H,
+    text: ':',
+    text_size: TIME_FONT_SIZE,
+    font: FONT_REGULAR,
+    color: COLOR_AOD_TIME,
+    shadow: false,
+    show_level: SHOW_AOD,
+    align_h: align.CENTER_H,
+    align_v: align.CENTER_V
+  }))
+
   const ss = now.getSeconds()
   secTensSlot = createRollingDigit(TIME_SEC_TENS_X, boxY, TIME_SEC_DIGIT_W, TIME_ROW_H, Math.floor(ss / 10))
   secUnitsSlot = createRollingDigit(TIME_SEC_UNITS_X, boxY, TIME_SEC_DIGIT_W, TIME_ROW_H, ss % 10)
@@ -685,14 +773,14 @@ function createMainTime() {
 // скрывают всё, что выезжает выше/ниже видимого окна цифры во время
 // анимации прокрутки — благодаря этому получается настоящий барабан
 // счётчика, а не две переползающие друг через друга надписи.
-  createWidget(widget.FILL_RECT, {
+  createWfWidget(widget.FILL_RECT, {
     x: TIME_SEC_TENS_X - TIME_ROLL_MASK_PADDING,
     y: boxY - TIME_ROW_H,
     w: TIME_SEC_DIGIT_W * 2 + TIME_ROLL_MASK_PADDING * 2,
     h: TIME_ROW_H,
     color: COLOR_BG
   })
-  createWidget(widget.FILL_RECT, {
+  createWfWidget(widget.FILL_RECT, {
     x: TIME_SEC_TENS_X - TIME_ROLL_MASK_PADDING,
     y: boxY + TIME_ROW_H,
     w: TIME_SEC_DIGIT_W * 2 + TIME_ROLL_MASK_PADDING * 2,
@@ -856,7 +944,7 @@ function createSectionDividers() {
   const yPositions = [TOP_TIME_LINE_Y, TIME_DATE_LINE_Y, DATE_BOTTOM_LINE_Y]
   for (let i = 0; i < yPositions.length; i++) {
     // FILL_RECT вместо LINE: widget.LINE не отрисовывается на части устройств
-    createWidget(widget.FILL_RECT, {
+    createWfWidget(widget.FILL_RECT, {
       x: SECTION_LINE_X,
       y: yPositions[i],
       w: SECTION_LINE_W,
@@ -876,7 +964,10 @@ function createDate() {
     text_size: DATE_LINE_FONT_SIZE,
     color: COLOR_GRAY,
     align_h: align.CENTER_H,
-    align_v: align.CENTER_V
+    align_v: align.CENTER_V,
+    // Дата нужна и на активном экране, и в AOD: серый цвет читается на чёрном
+    // фоне и не создаёт лишней нагрузки на AMOLED.
+    show_level: SHOW_NORMAL_AOD
   })
 
 }
@@ -901,7 +992,7 @@ function createBottomWidgets() {
   const halfW = BOTTOM_BLOCK_W / 2
 
   // --- Погода (слева): иконка центрирована на одной оси с кольцами ---
-  weatherIconWidget = createWidget(widget.IMG, {
+  weatherIconWidget = createWfWidget(widget.IMG, {
     x: WEATHER_CX - BOTTOM_ICON_SIZE / 2,
     y: BOTTOM_RING_CY - BOTTOM_ICON_SIZE / 2,
     w: BOTTOM_ICON_SIZE,
@@ -1041,7 +1132,7 @@ const CLICK_IMG = {
 }
 
 function createZoneButton(x, y, w, h, images, systemAppId) {
-  createWidget(widget.BUTTON, {
+  createWfWidget(widget.BUTTON, {
     x,
     y,
     w,
@@ -1087,28 +1178,40 @@ function createClickZones() {
 // ============================================================
 
 let lastRenderedDay = -1
+let lastRenderedTime = null
 
 function updateTime() {
   const now = new Date()
   const hh = twoDigits(now.getHours())
-  const mm = twoDigits(now.getMinutes())  
+  const mm = twoDigits(now.getMinutes())
   const ss = now.getSeconds()
 
   const timeDigits = [hh[0], hh[1], mm[0], mm[1]]
   for (let i = 0; i < timeDigitCells.length; i++) {
     timeDigitCells[i].main.setProperty(prop.TEXT, timeDigits[i])
-    timeDigitCells[i].shadow.setProperty(prop.TEXT, timeDigits[i])
+    if (timeDigitCells[i].shadow) timeDigitCells[i].shadow.setProperty(prop.TEXT, timeDigits[i])
   }
   for (let i = 0; i < timeColonCells.length; i++) {
     timeColonCells[i].main.setProperty(prop.TEXT, ':')
-    timeColonCells[i].shadow.setProperty(prop.TEXT, ':')
+    if (timeColonCells[i].shadow) timeColonCells[i].shadow.setProperty(prop.TEXT, ':')
     for (let j = 0; j < timeColonCells[i].glowWidgets.length; j++) {
       timeColonCells[i].glowWidgets[j].setProperty(prop.TEXT, ':')
     }
   }
+  for (let i = 0; i < aodTimeDigitCells.length; i++) {
+    aodTimeDigitCells[i].main.setProperty(prop.TEXT, timeDigits[i])
+  }
+  for (let i = 0; i < aodTimeColonCells.length; i++) {
+    aodTimeColonCells[i].main.setProperty(prop.TEXT, ':')
+  }
+  lastRenderedTime = hh + ':' + mm
 
-  startDigitRoll(secTensSlot, Math.floor(ss / 10))
-  startDigitRoll(secUnitsSlot, ss % 10)
+  // Секунды (и их ролл-анимация) на AOD не нужны — там виден только HH:MM,
+  // значит не тратим вычислительные ресурсы на скрытые маски.
+  if (!IS_AOD) {
+    startDigitRoll(secTensSlot, Math.floor(ss / 10))
+    startDigitRoll(secUnitsSlot, ss % 10)
+  }
 
   const day = now.getDate()
   if (day !== lastRenderedDay) {
@@ -1334,8 +1437,12 @@ function startTimer() {
   updateTime()
   mainTimer = setInterval(() => {
     updateTime()
-    updateWeatherFromSensor()
-    updatePai(readPaiValue(paiSensor))
+    // В AOD-сцене не опрашиваем сенсоры и не дёргаем виджеты статистики:
+    // они скрыты show_level, а экономия батареи важнее свежих цифр на затухшем экране.
+    if (!IS_AOD) {
+      updateWeatherFromSensor()
+      updatePai(readPaiValue(paiSensor))
+    }
   }, 500)
 }
 
@@ -1356,6 +1463,10 @@ function stopTimer() {
 
 WatchFace({
   build() {
+    // Определяем сцену на старте. Если страница запущена в AOD, не запускаем
+    // секундную анимацию и сенсорные опросы (см. updateTime / startTimer).
+    IS_AOD = typeof getScene === 'function' && getScene() === SCENE_AOD
+
     createBackground()
     createMainTime()
 // Маски прокручивающихся секунд находятся за верхними индикаторами, поэтому
@@ -1369,6 +1480,13 @@ WatchFace({
 
     initSensors()
     startTimer()
+  },
+
+  // После пробуждения таймер может продолжить работу с отложенным тиком.
+  // Принудительно обновляем время сразу, чтобы не показывать старый кадр.
+  onResume() {
+    lastRenderedDay = -1
+    updateTime()
   },
 
   onDestroy() {
