@@ -45,14 +45,9 @@ const HR_CX = 134                     // X-центр верхней колон�
 const STEPS_CX = 240                  // X-центр верхней колонки «Шаги» (центр экрана)
 const BAT_CX = 346                    // X-центр верхней колонки «Калории» — выровнен с нижней колонкой «PAI» (PAI_CX)
 
-// Основное время — собрано как одна центрированная строка: [HH:MM] [:] [S-десятки] [S-единицы]
-// HH:MM выровнено по правому краю внутри своего блока, поэтому не нужно
-// угадывать его точную отрисованную ширину — последний символ всегда
-// прижат к TIME_HHMM_RIGHT независимо от метрик шрифта. Две цифры секунд —
-// блоки фиксированной ширины с центрированным текстом, поэтому одиночные
-// глифы тоже всегда центрированы. Только общая зарезервированная ширина
-// (TIME_HHMM_BOX_W и т.д.) — примерная оценка для центрирования всей строки;
-// если строка сдвинута влево/вправо целиком, подправьте TIME_HHMM_BOX_W ниже.
+// Основное время строится как набор фиксированных слотов: H H : M M : S S.
+// Это убирает визуальное "плавание" строки, которое появляется у
+// пропорционального шрифта, когда часы/минуты/секунды имеют разную ширину.
 const TIME_CY = 214                   // Y-центр строки основного времени HH:MM:SS
 // У Rostex широкие глифы, поэтому эти размеры резервируют достаточно места
 // для полной строки HH:MM:SS на экране 480 px без обрезки первой цифры.
@@ -72,19 +67,27 @@ const TIME_GLOW_OFFSETS = [           // смещения копий-«луче�
 
 // Оставляем большой запас для широких глифов HH:MM в Rostex; иначе Zepp OS
 // посчитает текст выходящим за пределы и запустит бегущую строку.
-const TIME_HHMM_BOX_W = 260           // ширина блока HH:MM (с запасом под широкий шрифт)
+const TIME_HHMM_BOX_W = 260           // ширина зоны HH:MM (для центрирования фиксированных слотов и клика)
 const TIME_COLON_W = 24               // ширина блока под двоеточие между HH:MM и секундами
 const TIME_SEC_DIGIT_W = 56           // ширина блока одной цифры секунд (десятки/единицы)
 const TIME_ROLL_MASK_PADDING = 16     // запас маски прокрутки цифр, чтобы глиф не вылезал при анимации
 
-const TIME_ROW_TOTAL_W = TIME_HHMM_BOX_W + TIME_COLON_W + TIME_SEC_DIGIT_W * 2  // общая ширина строки времени
+const TIME_HHMM_DIGIT_W = 56          // фиксированная ширина одной цифры HH:MM
+const TIME_HHMM_VISUAL_W = TIME_HHMM_DIGIT_W * 4 + TIME_COLON_W  // визуальная ширина блока HH:MM
+
+const TIME_ROW_TOTAL_W = TIME_HHMM_VISUAL_W + TIME_COLON_W + TIME_SEC_DIGIT_W * 2  // общая ширина строки времени
 // Глифы HH:MM в Rostex визуально тяжелее справа, поэтому небольшая
 // оптическая поправка держит отображаемое время по центру круглого экрана.
 const TIME_ROW_LEFT = CENTER_X - TIME_ROW_TOTAL_W / 2 - 10  // левый край строки времени (-10 = оптическая поправка)
 
 const TIME_HHMM_X = TIME_ROW_LEFT                       // X левого края блока HH:MM
-const TIME_HHMM_RIGHT = TIME_HHMM_X + TIME_HHMM_BOX_W   // X правого края блока HH:MM (к нему прижат текст)
-const TIME_COLON_X = TIME_HHMM_RIGHT                    // X левого края блока двоеточия
+const TIME_HHMM_VISUAL_X = TIME_HHMM_X + Math.round((TIME_HHMM_BOX_W - TIME_HHMM_VISUAL_W) / 2)  // визуальный старт слотов HH:MM внутри зоны
+const TIME_HH_TENS_X = TIME_HHMM_VISUAL_X               // X левого края цифры часов (десятки)
+const TIME_HH_UNITS_X = TIME_HH_TENS_X + TIME_HHMM_DIGIT_W  // X левого края цифры часов (единицы)
+const TIME_HHMM_COLON_X = TIME_HH_UNITS_X + TIME_HHMM_DIGIT_W  // X левого края двоеточия между HH и MM
+const TIME_MM_TENS_X = TIME_HHMM_COLON_X + TIME_COLON_W      // X левого края цифры минут (десятки)
+const TIME_MM_UNITS_X = TIME_MM_TENS_X + TIME_HHMM_DIGIT_W    // X левого края цифры минут (единицы)
+const TIME_COLON_X = TIME_MM_UNITS_X + TIME_HHMM_DIGIT_W  // X левого края двоеточия перед секундами
 const TIME_SEC_TENS_X = TIME_COLON_X + TIME_COLON_W     // X левого края цифры «десятки» секунд
 const TIME_SEC_UNITS_X = TIME_SEC_TENS_X + TIME_SEC_DIGIT_W  // X левого края цифры «единицы» секунд
 
@@ -160,10 +163,8 @@ const RING_SEGMENT_GAP = 4
 // СОСТОЯНИЕ
 // ============================================================
 
-let timeWidget = null
-let timeShadowWidget = null
-let timeGlowWidgets = []
-let colonWidget = null
+let timeDigitCells = []
+let timeColonCells = []
 let topStepsWidget = null
 
 let secTensSlot = null
@@ -226,6 +227,60 @@ function clamp(value, min, max) {
 function createText(options) {
   options.font = options.font || FONT_LABEL
   return createWidget(widget.TEXT, options)
+}
+
+function createFixedTextCell(options) {
+  const cell = {
+    glowWidgets: [],
+    shadow: null,
+    main: null
+  }
+
+  if (options.glowColor) {
+    for (let i = 0; i < TIME_GLOW_OFFSETS.length; i++) {
+      const [dx, dy] = TIME_GLOW_OFFSETS[i]
+      cell.glowWidgets.push(createText({
+        x: options.x + dx,
+        y: options.y + dy,
+        w: options.w,
+        h: options.h,
+        text: options.text,
+        text_size: options.text_size,
+        font: options.font,
+        color: options.glowColor,
+        align_h: options.align_h,
+        align_v: options.align_v
+      }))
+    }
+  }
+
+  cell.shadow = createText({
+    x: options.x + TIME_SHADOW_OFFSET,
+    y: options.y + TIME_SHADOW_OFFSET,
+    w: options.w,
+    h: options.h,
+    text: options.text,
+    text_size: options.text_size,
+    font: options.font,
+    color: COLOR_SHADOW,
+    align_h: options.align_h,
+    align_v: options.align_v
+  })
+
+  cell.main = createText({
+    x: options.x,
+    y: options.y,
+    w: options.w,
+    h: options.h,
+    text: options.text,
+    text_size: options.text_size,
+    font: options.font,
+    color: options.color,
+    align_h: options.align_h,
+    align_v: options.align_v
+  })
+
+  return cell
 }
 
 function twoDigits(n) {
@@ -538,85 +593,90 @@ function createTopWidgets() {
 function createMainTime() {
   const boxY = TIME_CY - TIME_ROW_H / 2
 
-// Мягкое свечение за блоком HH:MM — несколько тусклых смещённых копий,
-// нарисованных первыми, чтобы слои тени/основного текста легли сверху чисто.
-  timeGlowWidgets = []
-  for (let i = 0; i < TIME_GLOW_OFFSETS.length; i++) {
-    const [dx, dy] = TIME_GLOW_OFFSETS[i]
-    const glow = createText({
-      x: TIME_HHMM_X + dx,
-      y: boxY + dy,
-      w: TIME_HHMM_BOX_W,
+  const now = new Date()
+  const hh = twoDigits(now.getHours())
+  const mm = twoDigits(now.getMinutes())
+
+  timeDigitCells = [
+    createFixedTextCell({
+      x: TIME_HH_TENS_X,
+      y: boxY,
+      w: TIME_HHMM_DIGIT_W,
       h: TIME_ROW_H,
-      text: '00:00',
+      text: hh[0],
       text_size: TIME_FONT_SIZE,
       font: FONT_REGULAR,
-      color: TIME_GLOW_COLOR,
-      align_h: align.RIGHT,
+      color: COLOR_WHITE,
+      align_h: align.CENTER_H,
+      align_v: align.CENTER_V
+    }),
+    createFixedTextCell({
+      x: TIME_HH_UNITS_X,
+      y: boxY,
+      w: TIME_HHMM_DIGIT_W,
+      h: TIME_ROW_H,
+      text: hh[1],
+      text_size: TIME_FONT_SIZE,
+      font: FONT_REGULAR,
+      color: COLOR_WHITE,
+      align_h: align.CENTER_H,
+      align_v: align.CENTER_V
+    }),
+    createFixedTextCell({
+      x: TIME_MM_TENS_X,
+      y: boxY,
+      w: TIME_HHMM_DIGIT_W,
+      h: TIME_ROW_H,
+      text: mm[0],
+      text_size: TIME_FONT_SIZE,
+      font: FONT_REGULAR,
+      color: COLOR_WHITE,
+      align_h: align.CENTER_H,
+      align_v: align.CENTER_V
+    }),
+    createFixedTextCell({
+      x: TIME_MM_UNITS_X,
+      y: boxY,
+      w: TIME_HHMM_DIGIT_W,
+      h: TIME_ROW_H,
+      text: mm[1],
+      text_size: TIME_FONT_SIZE,
+      font: FONT_REGULAR,
+      color: COLOR_WHITE,
+      align_h: align.CENTER_H,
       align_v: align.CENTER_V
     })
-    timeGlowWidgets.push(glow)
-  }
+  ]
 
-  // Псевдо-тень для блока HH:MM только (упрощённо).
-  timeShadowWidget = createText({
-    x: TIME_HHMM_X + TIME_SHADOW_OFFSET,
-    y: boxY + TIME_SHADOW_OFFSET,
-    w: TIME_HHMM_BOX_W,
-    h: TIME_ROW_H,
-    text: '00:00',
-    text_size: TIME_FONT_SIZE,
-    font: FONT_REGULAR,
-    color: COLOR_SHADOW,
-    align_h: align.RIGHT,
-    align_v: align.CENTER_V
-  })
-
-  timeWidget = createText({
-    x: TIME_HHMM_X,
-    y: boxY,
-    w: TIME_HHMM_BOX_W,
-    h: TIME_ROW_H,
-    text: '00:00',
-    text_size: TIME_FONT_SIZE,
-    font: FONT_REGULAR,
-    color: COLOR_WHITE,
-    align_h: align.RIGHT,
-    align_v: align.CENTER_V
-  })
-
-// Разделитель визуально относится к секундам, поэтому получает то же
-// маленькое голубое свечение, что и прокручивающиеся цифры.
-  for (let i = 0; i < TIME_GLOW_OFFSETS.length; i++) {
-    const [dx, dy] = TIME_GLOW_OFFSETS[i]
-    createText({
-      x: TIME_COLON_X + dx,
-      y: boxY + dy,
+  timeColonCells = [
+    createFixedTextCell({
+      x: TIME_HHMM_COLON_X,
+      y: boxY,
       w: TIME_COLON_W,
       h: TIME_ROW_H,
       text: ':',
       text_size: TIME_FONT_SIZE,
       font: FONT_REGULAR,
-      color: TIME_GLOW_COLOR,
+      color: COLOR_SEC,
+      glowColor: TIME_GLOW_COLOR,
+      align_h: align.CENTER_H,
+      align_v: align.CENTER_V
+    }),
+    createFixedTextCell({
+      x: TIME_COLON_X,
+      y: boxY,
+      w: TIME_COLON_W,
+      h: TIME_ROW_H,
+      text: ':',
+      text_size: TIME_FONT_SIZE,
+      font: FONT_REGULAR,
+      color: COLOR_SEC,
+      glowColor: TIME_GLOW_COLOR,
       align_h: align.CENTER_H,
       align_v: align.CENTER_V
     })
-  }
+  ]
 
-  colonWidget = createText({
-    x: TIME_COLON_X,
-    y: boxY,
-    w: TIME_COLON_W,
-    h: TIME_ROW_H,
-    text: ':',
-    text_size: TIME_FONT_SIZE,
-    font: FONT_REGULAR,
-    color: COLOR_SEC,
-    align_h: align.CENTER_H,
-    align_v: align.CENTER_V
-  })
-
-  const now = new Date()
   const ss = now.getSeconds()
   secTensSlot = createRollingDigit(TIME_SEC_TENS_X, boxY, TIME_SEC_DIGIT_W, TIME_ROW_H, Math.floor(ss / 10))
   secUnitsSlot = createRollingDigit(TIME_SEC_UNITS_X, boxY, TIME_SEC_DIGIT_W, TIME_ROW_H, ss % 10)
@@ -1034,11 +1094,17 @@ function updateTime() {
   const mm = twoDigits(now.getMinutes())  
   const ss = now.getSeconds()
 
-  const timeStr = hh + ':' + mm
-  timeWidget.setProperty(prop.TEXT, timeStr)
-  timeShadowWidget.setProperty(prop.TEXT, timeStr)
-  for (let i = 0; i < timeGlowWidgets.length; i++) {
-    timeGlowWidgets[i].setProperty(prop.TEXT, timeStr)
+  const timeDigits = [hh[0], hh[1], mm[0], mm[1]]
+  for (let i = 0; i < timeDigitCells.length; i++) {
+    timeDigitCells[i].main.setProperty(prop.TEXT, timeDigits[i])
+    timeDigitCells[i].shadow.setProperty(prop.TEXT, timeDigits[i])
+  }
+  for (let i = 0; i < timeColonCells.length; i++) {
+    timeColonCells[i].main.setProperty(prop.TEXT, ':')
+    timeColonCells[i].shadow.setProperty(prop.TEXT, ':')
+    for (let j = 0; j < timeColonCells[i].glowWidgets.length; j++) {
+      timeColonCells[i].glowWidgets[j].setProperty(prop.TEXT, ':')
+    }
   }
 
   startDigitRoll(secTensSlot, Math.floor(ss / 10))
